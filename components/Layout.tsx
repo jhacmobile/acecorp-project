@@ -53,10 +53,28 @@ const Layout: React.FC<LayoutProps> = ({ user, users, messages, stores, activeTa
   const [showNav, setShowNav] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['inventory', 'hr']);
 
+  // Dedicated Bandi User Logic: If they ONLY have Bandi access, lock them to that page
+  const isDedicatedBandi = useMemo(() => {
+    if (!user) return false;
+    const rights = user.accessRights;
+    return rights.bandiPage && 
+           !rights.dashboard && 
+           !rights.pos && 
+           !rights.sales && 
+           !rights.inventory && 
+           !rights.hrManagement && 
+           !rights.adminPage;
+  }, [user]);
+
+  useEffect(() => {
+    if (isDedicatedBandi && activeTab !== 'bandi') {
+      setActiveTab('bandi');
+    }
+  }, [isDedicatedBandi, activeTab, setActiveTab]);
+
   if (!user) return null;
 
   const isAdmin = user.role === UserRole.ADMIN;
-  const isDedicatedBandi = user.accessRights.bandiPage && !user.accessRights.dashboard && !user.accessRights.pos && !user.accessRights.sales && !user.accessRights.inventory && !user.accessRights.hrManagement && !user.accessRights.adminPage;
   const isCurrentlyBandi = activeTab === 'bandi';
 
   const menuItems = useMemo(() => {
@@ -139,6 +157,7 @@ const Layout: React.FC<LayoutProps> = ({ user, users, messages, stores, activeTa
         </div>
       )}
 
+      {/* Navigation sidebar - Hidden for dedicated Bandi terminals unless toggled by admin */}
       {(!isDedicatedBandi || showNav) && (
         <div className={`fixed inset-0 z-[1400] flex no-print ${showNav ? 'visible' : 'invisible'}`}>
           <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={() => setShowNav(false)}></div>
@@ -201,9 +220,11 @@ const Layout: React.FC<LayoutProps> = ({ user, users, messages, stores, activeTa
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 sm:h-20 bg-slate-950 border-b border-white/5 flex items-center justify-between px-4 sm:px-8 shrink-0 z-40 no-print">
            <div className="flex items-center gap-3 sm:gap-6">
-              <button onClick={() => setShowNav(true)} className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/5 text-slate-400 flex items-center justify-center hover:bg-white/10 hover:text-white transition-all">
-                 <i className="fas fa-bars text-sm sm:text-base"></i>
-              </button>
+              {!isDedicatedBandi && (
+                <button onClick={() => setShowNav(true)} className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/5 text-slate-400 flex items-center justify-center hover:bg-white/10 hover:text-white transition-all">
+                  <i className="fas fa-bars text-sm sm:text-base"></i>
+                </button>
+              )}
               
               {!isCurrentlyBandi && (
                 <div className="flex flex-col sm:flex-row sm:items-baseline gap-0 sm:gap-3">

@@ -204,9 +204,21 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     );
   };
 
-  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    setPrintCopyType(type);
-    setTimeout(() => { window.print(); }, 150);
+  // SEQUENTIAL PRINT ENGINE: Mimics independent hardware cutting
+  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    if (type === 'ALL') {
+      const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
+      for (const copy of sequence) {
+         setPrintCopyType(copy);
+         // Settlement delay to ensure DOM update before print dialog capture
+         await new Promise(r => setTimeout(r, 300));
+         window.print();
+      }
+      setPrintCopyType('ALL');
+    } else {
+      setPrintCopyType(type);
+      setTimeout(() => { window.print(); }, 150);
+    }
   };
 
   const formatCurrency = (val: number) => `₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -220,7 +232,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
           @page { size: portrait; margin: 10mm; }
           body * { visibility: hidden !important; }
 
-          /* Full Audit Manifest Print Override */
+          /* Full Audit Manifest Print Override (Printed Once) */
           #audit-manifest-report-root, #audit-manifest-report-root * { 
             visibility: visible !important; 
             display: block !important; 
@@ -233,7 +245,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
              color: black !important;
           }
 
-          /* Thermal Receipt Logic */
+          /* Thermal Receipt Logic (Sequential) */
           #audit-thermal-print-root, #audit-thermal-print-root * { 
             visibility: visible !important; 
             display: block !important; 
@@ -328,19 +340,13 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
          </div>
       </div>
 
-      {/* THERMAL PRINT ROOT */}
+      {/* THERMAL PRINT ROOT (Sequential isolated copy) */}
       <div id="audit-thermal-print-root" className={selectedOrder ? "block" : "hidden"}>
          {selectedOrder && (
            <div className="w-[80mm] bg-white">
-              {printCopyType === 'ALL' ? (
-                <>
-                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}</div>
-                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'GATE PASS')}</div>
-                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'STORE COPY')}</div>
-                </>
-              ) : (
-                <div className="receipt-copy">{generateReceiptPart(selectedOrder, `${printCopyType} COPY`)}</div>
-              )}
+              <div className="receipt-copy">
+                {generateReceiptPart(selectedOrder, `${printCopyType === 'ALL' ? 'CUSTOMER' : printCopyType} COPY`)}
+              </div>
            </div>
          )}
       </div>
@@ -463,7 +469,10 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   {showOrderReceipt ? (
                     <div className="bg-white p-6 shadow-sm border border-slate-200 mx-auto w-full max-w-[320px] text-black">
                         <div className="receipt-container font-mono text-black text-center text-[10px] w-full pt-2">
-                           {generateReceiptPart(selectedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}
+                           {/* Visual Preview shows all copies, but Sequential Engine prints individually */}
+                           <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}</div>
+                           <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'GATE PASS')}</div>
+                           <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'STORE COPY')}</div>
                         </div>
                     </div>
                   ) : (

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Employee, AttendanceRecord, User } from '../types';
 
@@ -9,7 +10,7 @@ interface BandiPageProps {
   onSync: (at: AttendanceRecord[]) => Promise<boolean>;
 }
 
-const BandiPage: React.FC<BandiPageProps> = ({ employees, attendance, setAttendance, onSync }) => {
+const BandiPage: React.FC<BandiPageProps> = ({ user, employees, attendance, setAttendance, onSync }) => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [pinInput, setPinInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -22,7 +23,6 @@ const BandiPage: React.FC<BandiPageProps> = ({ employees, attendance, setAttenda
     return () => clearInterval(timer);
   }, []);
 
-  // Monitor PIN input to auto-select employee
   useEffect(() => {
     if (pinInput.length === 4) {
       const matched = employees.find(e => e.pin === pinInput);
@@ -49,7 +49,6 @@ const BandiPage: React.FC<BandiPageProps> = ({ employees, attendance, setAttenda
     const finalPin = nextPin.join('');
     setPinInput(finalPin);
 
-    // Auto-focus next
     if (newVal && index < 3) {
       pinRefs.current[index + 1]?.focus();
     }
@@ -106,11 +105,13 @@ const BandiPage: React.FC<BandiPageProps> = ({ employees, attendance, setAttenda
     const minutesIn = timeToMinutes(timeStr);
     const minutesShift = timeToMinutes(shiftStart);
     
+    // Rigid shift rule: fixed late calculation
     const lateMinutes = Math.max(0, minutesIn - minutesShift);
 
     const newRecord: AttendanceRecord = {
       id: `ATT-${Date.now()}`,
       employeeId: selectedEmployee.id,
+      storeId: user.selectedStoreId,
       date: today,
       timeIn: timeStr,
       timeOut: '',
@@ -151,17 +152,25 @@ const BandiPage: React.FC<BandiPageProps> = ({ employees, attendance, setAttenda
     const minutesShiftEnd = timeToMinutes(shiftEnd);
     
     const workedMinutes = Math.max(0, minutesOut - minutesIn);
+    const totalScheduledMinutes = minutesShiftEnd - minutesShiftStart;
     
-    const isHalfDay = workedMinutes >= 240 && workedMinutes <= 300;
+    // NEW Half-Day Protocol: Middle-shift threshold logic
+    // Rule: D >= 12h -> threshold = 6h. D < 12h -> threshold = D/2 + 30m.
+    const halfDayThreshold = (totalScheduledMinutes / 2) + (totalScheduledMinutes < 720 ? 30 : 0);
+    
+    // Tag as half-day if worked minutes meet the threshold but fall under the Full-Day floor (80% of shift)
+    const isHalfDay = workedMinutes >= halfDayThreshold && workedMinutes < (totalScheduledMinutes * 0.8);
     
     let finalLate = 0;
     let finalUT = 0;
     let finalOT = 0;
 
     if (isHalfDay) {
+      // Half-day fixed credit: ignores granular late/ut deductions
       finalLate = 0;
       finalUT = 0;
     } else {
+      // Rigid Shift Rule: Late arrival is fixed vs Shift-Start. Late logout does NOT compensate for late login.
       finalLate = Math.max(0, minutesIn - minutesShiftStart);
       finalUT = Math.max(0, minutesShiftEnd - minutesOut);
       finalOT = Math.max(0, minutesOut - minutesShiftEnd);
@@ -204,10 +213,7 @@ const BandiPage: React.FC<BandiPageProps> = ({ employees, attendance, setAttenda
   return (
     <div className="h-full bg-slate-950 flex flex-col items-center justify-center p-4 sm:p-12 md:p-16 font-sans overflow-hidden relative">
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
-      
       <div className="w-full max-w-4xl lg:max-w-5xl flex flex-col items-center animate-in fade-in zoom-in duration-700 relative z-10 pt-4">
-        
-        {/* Title Group - Larger Visualization */}
         <div className="text-center mb-8 sm:mb-12">
            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-2">
               <div className="w-14 h-14 sm:w-20 sm:h-20 bg-sky-600 rounded-2xl flex items-center justify-center shadow-2xl border border-sky-400/30">
@@ -218,22 +224,16 @@ const BandiPage: React.FC<BandiPageProps> = ({ employees, attendance, setAttenda
            <p className="text-sky-500 font-black uppercase tracking-[0.4em] sm:tracking-[0.8em] text-[8px] sm:text-[11px] md:text-[13px]">Enterprise Core Attendance Relay</p>
         </div>
 
-        {/* Main Terminal Card - Substantially Larger */}
         <div className="bg-slate-900/70 backdrop-blur-3xl border border-white/5 p-8 sm:p-12 md:p-20 rounded-[48px] sm:rounded-[64px] shadow-[0_32px_128px_-16px_rgba(0,0,0,0.8)] w-full flex flex-col gap-8 sm:gap-12">
-           
-           {/* Identity Section */}
            <div className="space-y-6">
               <div className="flex justify-between items-end px-4">
                 <label className="text-[9px] sm:text-[12px] font-black text-slate-500 uppercase tracking-[0.2em] italic">Verification Protocol</label>
                 {pinInput && <button onClick={resetEntry} className="text-[8px] sm:text-[11px] font-black text-rose-500 uppercase tracking-widest hover:text-rose-400 bg-rose-500/10 px-4 py-1.5 rounded-full border border-rose-500/20 transition-all">Clear Signal</button>}
               </div>
-              
-              {/* PIN INPUT GRID - Scaled for high visibility */}
               <div className="flex justify-center gap-4 sm:gap-6">
                  {[0, 1, 2, 3].map((i) => (
                     <input
                       key={i}
-                      // Added curly braces to ref callback to ensure it returns void and fix TS error
                       ref={el => { pinRefs.current[i] = el; }}
                       type="password"
                       inputMode="numeric"
@@ -246,8 +246,6 @@ const BandiPage: React.FC<BandiPageProps> = ({ employees, attendance, setAttenda
                     />
                  ))}
               </div>
-
-              {/* Manual Registry - Larger Select UI */}
               <div className="relative group">
                 <select 
                   value={selectedEmployeeId}
@@ -263,7 +261,6 @@ const BandiPage: React.FC<BandiPageProps> = ({ employees, attendance, setAttenda
               </div>
            </div>
 
-           {/* Action Protocol Grid - Dynamic Idle/Action Switch */}
            <div className="min-h-[160px] sm:min-h-[280px] md:min-h-[380px]">
              {selectedEmployee ? (
                <div className="grid grid-cols-2 gap-6 sm:gap-10 h-full animate-in zoom-in duration-500">
@@ -315,7 +312,6 @@ const BandiPage: React.FC<BandiPageProps> = ({ employees, attendance, setAttenda
              )}
            </div>
 
-           {/* Feedback Messaging - Large Notifications */}
            {statusMsg && (
              <div className={`py-6 sm:py-8 px-10 rounded-[24px] sm:rounded-[40px] text-center font-black uppercase tracking-widest text-[12px] sm:text-[18px] md:text-[22px] animate-in slide-in-from-bottom-4 duration-500 border-2 ${statusMsg.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
                 <i className={`fas ${statusMsg.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'} mr-4`}></i>
@@ -324,7 +320,6 @@ const BandiPage: React.FC<BandiPageProps> = ({ employees, attendance, setAttenda
            )}
         </div>
 
-        {/* Dynamic Atomic Clock & Registry Info - Forced Philippine Time (Asia/Manila) - Scaled Footer */}
         <div className="w-full flex justify-between items-end mt-10 sm:mt-16 px-6 sm:px-12 border-t border-white/5 pt-8 opacity-40">
            <div className="flex flex-col">
               <span className="text-[9px] sm:text-[12px] md:text-[14px] font-black text-slate-600 uppercase tracking-[0.3em] mb-1 italic">Synchronized Relay (PH)</span>

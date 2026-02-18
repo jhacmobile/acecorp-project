@@ -246,11 +246,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     );
   };
 
-  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    setPrintCopyType(type);
-    setTimeout(() => {
-       window.print();
-    }, 150);
+  // SEQUENTIAL PRINT ENGINE: Cycles through copies for independent printer cuts
+  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    if (type === 'ALL') {
+      const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
+      for (const copy of sequence) {
+         setPrintCopyType(copy);
+         // Wait for DOM to stabilize with the specific copy type
+         await new Promise(r => setTimeout(r, 300));
+         window.print();
+      }
+      setPrintCopyType('ALL');
+    } else {
+      setPrintCopyType(type);
+      setTimeout(() => {
+         window.print();
+      }, 150);
+    }
   };
 
   const COLORS = ['#38bdf8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -340,15 +352,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
       <div id="dashboard-thermal-print-root" className="hidden">
          {selectedOrder && (
            <div className="w-[80mm] bg-white">
-              {printCopyType === 'ALL' ? (
-                <>
-                   <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}</div>
-                   <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'GATE PASS')}</div>
-                   <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'STORE COPY')}</div>
-                </>
-              ) : (
-                <div className="receipt-copy">{generateReceiptPart(selectedOrder, `${printCopyType} COPY`)}</div>
-              )}
+              {/* Isolated Copy Logic: Prevents merging layouts during sequence */}
+              <div className="receipt-copy">
+                {generateReceiptPart(selectedOrder, `${printCopyType === 'ALL' ? 'CUSTOMER' : printCopyType} COPY`)}
+              </div>
            </div>
          )}
       </div>
@@ -540,7 +547,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                   {showOrderReceipt ? (
                      <div className="bg-white p-4 sm:p-8 shadow-sm border border-slate-200 mx-auto w-full max-w-[320px] text-black">
                         <div className="receipt-container font-mono text-black text-center text-[10px] w-full pt-2">
-                           {generateReceiptPart(selectedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}
+                           {/* Visual Preview shows all copies, but Sequential Engine prints individually */}
+                           <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}</div>
+                           <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'GATE PASS')}</div>
+                           <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'STORE COPY')}</div>
                         </div>
                      </div>
                   ) : (

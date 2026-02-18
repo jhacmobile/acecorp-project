@@ -514,8 +514,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   const handleReprint = () => {
     if (!selectedHistoryOrder) return;
     setCompletedOrder(selectedHistoryOrder);
-    setPrintCopyType('ALL');
-    setIsReceiptPreviewOpen(true);
+    handlePrintRequest('ALL');
   };
 
   const generateReceiptPart = (order: Order, label: string) => {
@@ -567,11 +566,23 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     );
   };
 
-  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    setPrintCopyType(type);
-    setTimeout(() => {
-       window.print();
-    }, 150);
+  // SEQUENTIAL PRINT ENGINE: Mimics manual cut behavior for ALL button
+  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    if (type === 'ALL') {
+      const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
+      for (const copy of sequence) {
+         setPrintCopyType(copy);
+         // Settlement delay to ensure DOM update before print dialog capture
+         await new Promise(r => setTimeout(r, 300));
+         window.print();
+      }
+      setPrintCopyType('ALL');
+    } else {
+      setPrintCopyType(type);
+      setTimeout(() => {
+         window.print();
+      }, 150);
+    }
   };
 
   const handleVoidOrder = async () => {
@@ -702,15 +713,10 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
       <div id="pos-receipt-print-root" className="hidden">
         {completedOrder && (
           <div className="w-[80mm] bg-white">
-             {printCopyType === 'ALL' ? (
-                <>
-                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'CUSTOMER COPY')}</div>
-                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'GATE PASS')}</div>
-                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'STORE COPY')}</div>
-                </>
-             ) : (
-                <div className="receipt-copy">{generateReceiptPart(completedOrder, `${printCopyType} COPY`)}</div>
-             )}
+             {/* Sequential Logic Override: During sequence, state is set to specific copy */}
+             <div className="receipt-copy">
+                {generateReceiptPart(completedOrder, `${printCopyType === 'ALL' ? 'CUSTOMER' : printCopyType} COPY`)}
+             </div>
           </div>
         )}
       </div>
@@ -786,7 +792,9 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar mb-6 bg-white border border-slate-200 shadow-inner rounded-xl p-6">
                  <div className="receipt-container font-mono text-black text-center text-[10px] w-full pt-2">
-                    {generateReceiptPart(completedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}
+                    <div className="receipt-copy">{generateReceiptPart(completedOrder, 'CUSTOMER COPY')}</div>
+                    <div className="receipt-copy">{generateReceiptPart(completedOrder, 'GATE PASS')}</div>
+                    <div className="receipt-copy">{generateReceiptPart(completedOrder, 'STORE COPY')}</div>
                  </div>
               </div>
               <div className="p-4 border-t bg-white flex flex-col gap-3 shrink-0 no-print">
@@ -1090,7 +1098,9 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                            {showHistoryReceipt ? (
                               <div className="bg-white p-8 shadow-sm border border-slate-200 mx-auto w-full max-w-[320px] thermal-preview text-black">
                                 <div className="w-full bg-white">
-                                  {generateReceiptPart(selectedHistoryOrder, 'CUSTOMER COPY')}
+                                   <div className="receipt-copy">{generateReceiptPart(selectedHistoryOrder, 'CUSTOMER COPY')}</div>
+                                   <div className="receipt-copy">{generateReceiptPart(selectedHistoryOrder, 'GATE PASS')}</div>
+                                   <div className="receipt-copy">{generateReceiptPart(selectedHistoryOrder, 'STORE COPY')}</div>
                                 </div>
                               </div>
                            ) : (
@@ -1101,10 +1111,10 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                            <button onClick={handleModifyOrder} disabled={selectedHistoryOrder.status === OrderStatus.CANCELLED} className="py-5 bg-[#2d5da7] text-white rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all disabled:opacity-30">Modify Order</button>
                            <div className="flex flex-col gap-2">
                               <div className="grid grid-cols-4 gap-1">
-                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setPrintCopyType('CUSTOMER'); setTimeout(() => window.print(), 100); }} className="py-2 bg-white border border-slate-200 rounded-lg text-[8px] font-black">CUST</button>
-                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setPrintCopyType('GATE'); setTimeout(() => window.print(), 100); }} className="py-2 bg-white border border-slate-200 rounded-lg text-[8px] font-black">GATE</button>
-                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setPrintCopyType('STORE'); setTimeout(() => window.print(), 100); }} className="py-2 bg-white border border-slate-200 rounded-lg text-[8px] font-black">STOR</button>
-                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setPrintCopyType('ALL'); setTimeout(() => window.print(), 100); }} className="py-2 bg-slate-900 text-white rounded-lg text-[8px] font-black">ALL</button>
+                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); handlePrintRequest('CUSTOMER'); }} className={`py-2 rounded-lg text-[8px] font-black transition-all border ${printCopyType === 'CUSTOMER' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white border-slate-200'}`}>CUST</button>
+                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); handlePrintRequest('GATE'); }} className={`py-2 rounded-lg text-[8px] font-black transition-all border ${printCopyType === 'GATE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white border-slate-200'}`}>GATE</button>
+                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); handlePrintRequest('STORE'); }} className={`py-2 rounded-lg text-[8px] font-black transition-all border ${printCopyType === 'STORE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white border-slate-200'}`}>STOR</button>
+                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); handlePrintRequest('ALL'); }} className={`py-2 rounded-lg text-[8px] font-black transition-all border ${printCopyType === 'ALL' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200'}`}>ALL</button>
                               </div>
                               <button onClick={handleReprint} className="py-3 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><i className="fas fa-print"></i> Quick ALL</button>
                            </div>

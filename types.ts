@@ -1,3 +1,4 @@
+
 // Exported enums and interfaces for the AceCorp Enterprise Core application
 
 export enum UserRole {
@@ -165,6 +166,7 @@ export interface Employee {
   shiftStart: string; // HH:mm
   shiftEnd: string;   // HH:mm
   pin?: string;       // 4-digit PIN for Bandi Terminal
+  address?: string;   // Home address
   loanBalance: number;
   loanWeeklyDeduction: number;
   loanFrequency?: LoanFrequency;
@@ -184,6 +186,7 @@ export type AttendanceStatus = 'REGULAR' | 'OB' | 'PTO' | 'ABSENT';
 export interface AttendanceRecord {
   id: string;
   employeeId: string;
+  storeId?: string; // Tracks which operational node the record belongs to
   date: string;
   timeIn: string;
   timeOut: string;
