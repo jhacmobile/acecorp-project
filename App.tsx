@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { User, Store, Product, Stock, Customer, Order, Employee, AttendanceRecord, Expense, UserRole, Brand, ProductCategory, StockTransfer, OrderStatus, TransferStatus, ChatMessage, AccessRights, AccountsReceivable, ReceivablePayment, PayrollHistoryRecord, AttendanceStatus, PayrollDraft, AppSettings } from './types';
+import { User, Store, Product, Stock, Customer, Order, Employee, AttendanceRecord, Expense, UserRole, Brand, ProductCategory, StockTransfer, OrderStatus, TransferStatus, ChatMessage, AccessRights, AccountsReceivable, ReceivablePayment, PayrollHistoryRecord, AttendanceStatus, PayrollDraft, AppSettings, PaymentMethod } from './types';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard'; 
 import POS from './components/POS';
@@ -94,12 +94,11 @@ const App = () => {
     return Array.from(map.values());
   };
 
-  const fetchData = useCallback(async (tableFilters?: string[]) => {
-    // Avoid redundant fetching if already syncing
-    if (isSyncingRef.current) return;
+  const fetchData = useCallback(async (tableFilters?: string[], isInitial: boolean = false, force: boolean = false) => {
+    if (isSyncingRef.current && !force) return;
     
-    // Throttle repeated global fetches (e.g. on rapid tab switching)
-    if (!tableFilters && Date.now() - lastSyncRef.current < 2000) return;
+    // Throttle repeated background global fetches, but ALWAYS allow mount-load or forced re-validation
+    if (!isInitial && !force && !tableFilters && Date.now() - lastSyncRef.current < 2000) return;
 
     if (!supabase || !hasValidConfig) {
       setSyncStatus('error');
@@ -115,8 +114,7 @@ const App = () => {
       const fetchTable = async (table: string, orderCol?: string, ascending: boolean = false, limit?: number, columns: string = '*') => {
         try {
           if (!shouldFetch(table)) return null;
-          // Micro-delay to avoid network flood and browser queue rejection
-          await new Promise(r => setTimeout(r, 80));
+          await new Promise(r => setTimeout(r, 60)); // Serial spacing for network health
           
           let query = supabase.from(table).select(columns);
           if (orderCol) query = query.order(orderCol, { ascending });
@@ -144,13 +142,20 @@ const App = () => {
       const fetchOrdersOptimized = async () => {
         if (!shouldFetch('orders')) return null;
         try {
-          await new Promise(r => setTimeout(r, 80));
+          await new Promise(r => setTimeout(r, 60));
           const ninetyDaysAgo = new Date();
           ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+          
+          // Request Fingerprinting: Defeat Chrome disk cache by ensuring the query URL is unique.
+          // We use a redundant ID filter to break the cache without affecting the result set.
+          const fingerprint = `bust_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+          
           const { data, error } = await supabase.from('orders')
-            .select('id, store_id, customer_id, customer_name, address, city, contact, landmark, items, total_amount, total_discount, status, payment_method, created_at, updated_at, created_by, modified_by, remark, returned_cylinder, rider_id, rider_name')
-            .gte('created_at', ninetyDaysAgo.toISOString())
+            .select('*') // Select all columns to ensure mapping doesn't miss new data
+            .gte('created_at', ninetyDaysAgo.toISOString().split('.')[0])
+            .neq('id', fingerprint) 
             .order('created_at', { ascending: false });
+            
           return error ? [] : data;
         } catch (e: any) {
           console.warn(`Hydration failure for table [orders]:`, e.message);
@@ -158,7 +163,6 @@ const App = () => {
         }
       };
 
-      // Sequential Execution for Network Stability
       const pData = await fetchTable('products', 'name', true, undefined, 'id, name, brand, type, price, status, size');
       const sData = await fetchTable('stocks', undefined, false, undefined, 'id, product_id, store_id, quantity, initial_stock, status');
       const stData = await fetchTable('stores', 'name', true, undefined, 'id, name, code, address, phone, mobile');
@@ -183,16 +187,79 @@ const App = () => {
       if (stData) setStores(stData.map((s:any) => ({ ...s, id: String(s.id).trim() })));
       if (bData) setBrands(bData.map((b:any) => ({ ...b, id: String(b.id).trim() })));
       if (cData) setCategories(cData.map((c:any) => ({ ...c, id: String(c.id).trim() })));
-      if (cuData) setCustomers(cuData.map((c:any) => ({ id: String(c.id).trim(), firstName: c.first_name || '', lastName: c.last_name || '', names: Array.isArray(c.names) ? c.names : [c.customer_name || 'Unknown'], addresses: Array.isArray(c.addresses) ? c.addresses : [String(c.address || '')], city: c.city || '', landmark: c.landmark || '', contactNumber: c.contact_number || '', discountPerCylinder: Number(c.discount_per_cylinder) || 0, notes: c.notes || '' })));
-      if (oData) setOrders(oData.map((o:any) => ({ ...o, id: String(o.id).trim(), totalAmount: Number(o.total_amount ?? 0), totalDiscount: Number(o.total_discount ?? 0), receiptHtml: '' })));
-      if (arData) setReceivables(arData.map((ar:any) => ({ id: String(ar.id).trim(), customerId: String(ar.customer_id).trim(), orderId: String(ar.order_id).trim(), originalAmount: Number(ar.original_amount), outstandingAmount: Number(ar.outstanding_amount), status: ar.status, createdAt: ar.created_at || ar.createdAt, remarks: ar.remarks || '' })));
-      if (rpData) setReceivablePayments(rpData.map((rp:any) => ({ id: String(rp.id).trim(), receivable_id: String(rp.receivable_id).trim(), amount: Number(rp.amount), paymentMethod: rp.payment_method, paidAt: rp.paid_at })));
-      if (eData) setEmployees(eData.map((e:any) => ({ id: String(e.id).trim(), assignedStoreIds: Array.isArray(e.assigned_store_ids) ? e.assigned_store_ids.map(id => String(id).trim()) : [String(e.store_id || '').trim()], employeeNumber: e.employee_number, name: e.name, type: e.type, salary: Number(e.salary) || 0, shift_start: e.shift_start || '08:00', shift_end: e.shift_end || '17:00', pin: e.pin || '', loanBalance: Number(e.loan_balance) || 0, loanWeeklyDeduction: Number(e.loan_weekly_deduction) || 0, valeBalance: Number(e.vale_balance) || 0, sssLoanBalance: Number(e.sss_loan_balance) || 0, sssLoanWeeklyDeduction: Number(e.sss_loan_weekly_deduction) || 0, loanTerms: e.loan_terms || '0', loans: e.loans || { salary: 0, sss: 0, vale: 0 }, loanBalances: e.loan_balances || { salary: 0, sss: 0, vale: 0 } })));
-      if (atData) setAttendance(atData.map((a:any) => ({ id: String(a.id).trim(), employee_id: String(a.employee_id).trim(), date: a.date, time_in: a.time_in || '', time_out: a.time_out || '', late_minutes: Number(a.late_minutes) || 0, undertime_minutes: Number(a.undertime_minutes) || 0, overtime_minutes: Number(a.overtime_minutes) || 0, is_half_day: !!a.is_half_day, status: (a.status as AttendanceStatus) || 'REGULAR' })));
-      if (phData) setPayrollHistory(phData.map((ph:any) => ({ id: ph.id, periodStart: ph.period_start, periodEnd: ph.period_end, generatedAt: ph.generated_at || ph.generatedAt, generatedBy: ph.generated_by || ph.generatedBy, totalDisbursement: Number(ph.total_disbursement), payroll_data: ph.payroll_data || [] })));
+      if (cuData) setCustomers(cuData.map((c:any) => ({ id: String(c.id).trim(), firstName: c.first_name || '', lastName: c.last_name || '', names: Array.isArray(c.names) ? c.names : [], addresses: Array.isArray(c.addresses) ? c.addresses : [], city: c.city || '', landmark: c.landmark || '', contactNumber: c.contact_number || '', discountPerCylinder: Number(c.discount_per_cylinder) || 0, notes: c.notes || '' })));
+      
+      if (oData) {
+        // Critical Fix: Explicit mapping of snake_case (DB) to camelCase (State) 
+        // to ensure Dashboard and Audit filters function correctly.
+        setOrders(oData.map((o: any) => ({
+          id: String(o.id).trim(),
+          storeId: String(o.store_id || '').trim(),
+          customerId: String(o.customer_id || '').trim(),
+          customerName: o.customer_name || 'N/A',
+          address: o.address || '',
+          city: o.city || '',
+          contact: o.contact || '',
+          landmark: o.landmark || '',
+          items: o.items || [],
+          totalAmount: Number(o.total_amount || 0),
+          totalDiscount: Number(o.total_discount || 0),
+          status: o.status as OrderStatus,
+          paymentMethod: o.payment_method as PaymentMethod,
+          createdAt: o.created_at,
+          updatedAt: o.updated_at,
+          createdBy: o.created_by || 'SYSTEM',
+          modifiedBy: o.modified_by || 'SYSTEM',
+          remark: o.remark || '',
+          returnedCylinder: !!o.returned_cylinder,
+          riderId: o.rider_id ? String(o.rider_id).trim() : undefined,
+          riderName: o.rider_name || undefined
+        })));
+      }
+
+      if (arData) {
+        setReceivables(arData.map((ar:any) => ({ 
+          id: String(ar.id).trim(), 
+          customerId: String(ar.customer_id).trim(), 
+          orderId: String(ar.order_id).trim(), 
+          originalAmount: Number(ar.original_amount), 
+          outstandingAmount: Number(ar.outstanding_amount), 
+          status: ar.status, 
+          createdAt: ar.created_at, 
+          remarks: ar.remarks || '' 
+        })));
+      }
+
+      if (rpData) {
+        setReceivablePayments(rpData.map((rp:any) => ({ 
+          id: String(rp.id).trim(), 
+          receivableId: String(rp.receivable_id).trim(), 
+          amount: Number(rp.amount), 
+          paymentMethod: rp.payment_method, 
+          paidAt: rp.paid_at 
+        })));
+      }
+
+      if (eData) setEmployees(eData.map((e:any) => ({ id: String(e.id).trim(), assignedStoreIds: Array.isArray(e.assigned_store_ids) ? e.assigned_store_ids.map(id => String(id).trim()) : [String(e.store_id || '').trim()], employeeNumber: e.employee_number, name: e.name, type: e.type, salary: Number(e.salary) || 0, shiftStart: e.shift_start || '08:00', shiftEnd: e.shift_end || '17:00', pin: e.pin || '', loanBalance: Number(e.loan_balance) || 0, loanWeeklyDeduction: Number(e.loan_weekly_deduction) || 0, valeBalance: Number(e.vale_balance) || 0, sssLoanBalance: Number(e.sss_loan_balance) || 0, sssLoanWeeklyDeduction: Number(e.sss_loan_weekly_deduction) || 0, loanTerms: e.loan_terms || '0', loans: e.loans || { salary: 0, sss: 0, vale: 0 }, loanBalances: e.loan_balances || { salary: 0, sss: 0, vale: 0 } })));
+      if (atData) setAttendance(atData.map((a:any) => ({ id: String(a.id).trim(), employeeId: String(a.employee_id).trim(), date: a.date, timeIn: a.time_in || '', timeOut: a.time_out || '', lateMinutes: Number(a.late_minutes) || 0, undertimeMinutes: Number(a.undertime_minutes) || 0, overtimeMinutes: Number(a.overtime_minutes) || 0, isHalfDay: !!a.is_half_day, status: (a.status as AttendanceStatus) || 'REGULAR' })));
+      if (phData) setPayrollHistory(phData.map((ph:any) => ({ id: ph.id, periodStart: ph.period_start, periodEnd: ph.period_end, generatedAt: ph.generated_at || ph.generatedAt, generatedBy: ph.generated_by || ph.generatedBy, totalDisbursement: Number(ph.total_disbursement), payrollData: ph.payroll_data || [] })));
       if (pdData) setPayrollDrafts(pdData.map((pd:any) => ({ id: pd.id, storeId: pd.store_id, periodStart: pd.period_start, periodEnd: pd.period_end, adjustments: pd.adjustments || {}, updatedAt: pd.updated_at })));
       if (exData) setExpenses(exData.map((ex:any) => ({ ...ex, id: String(ex.id).trim(), storeId: String(ex.store_id).trim() })));
-      if (tData) setTransfers(tData.map((t:any) => ({ id: String(t.id).trim(), from_store_id: String(t.from_store_id).trim(), to_store_id: String(t.to_store_id).trim(), items: Array.isArray(t.items) ? t.items : [], returnedItems: Array.isArray(t.returned_items) ? t.returned_items : [], status: t.status as TransferStatus, createdAt: t.created_at || new Date().toISOString(), updatedAt: t.updated_at || new Date().toISOString(), initiatedBy: t.initiatedBy || t.initiated_by, acceptedBy: t.acceptedBy || t.accepted_by })));
+      
+      if (tData) {
+        setTransfers(tData.map((t:any) => ({ 
+          id: String(t.id).trim(), 
+          fromStoreId: String(t.from_store_id).trim(), 
+          toStoreId: String(t.to_store_id).trim(), 
+          items: Array.isArray(t.items) ? t.items : [], 
+          returnedItems: Array.isArray(t.returned_items) ? t.returned_items : [], 
+          status: t.status as TransferStatus, 
+          createdAt: t.created_at, 
+          updatedAt: t.updated_at, 
+          initiatedBy: t.initiated_by, 
+          acceptedBy: t.accepted_by 
+        })));
+      }
       
       if (uData) {
         const mappedUsers = uData.map((u:any) => {
@@ -217,13 +284,13 @@ const App = () => {
   }, [currentUser?.id]);
 
   useEffect(() => { 
-    fetchData(); 
+    // Perform critical hydration on mount (bypass throttle)
+    fetchData(undefined, true, true); 
     
-    // Aggressive Revalidation on tab switch / window focus
-    // This solves Chrome "freezing" or "caching" data in background tabs
     const handleRevalidation = () => {
       if (document.visibilityState === 'visible') {
-        fetchData();
+        // Trigger a forced re-validation when the user returns to the tab
+        fetchData(undefined, false, true);
       }
     };
 
@@ -239,18 +306,17 @@ const App = () => {
   useEffect(() => {
     if (!supabase || !hasValidConfig) return;
     
-    // Enhanced Real-time Channel with status tracking
     const channel = supabase.channel('acecorp_realtime_broadcast')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchData(['orders']))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stocks' }, () => fetchData(['stocks']))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_transfers' }, () => fetchData(['stock_transfers']))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, () => fetchData(['chat_messages']))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, () => fetchData(['employees']))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => fetchData(['customers']))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchData(['orders'], false, true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stocks' }, () => fetchData(['stocks'], false, true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_transfers' }, () => fetchData(['stock_transfers'], false, true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, () => fetchData(['chat_messages'], false, true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, () => fetchData(['employees'], false, true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => fetchData(['customers'], false, true))
       .subscribe((status) => {
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
            console.warn('AceCorp: Real-time broadcast link unstable. Re-syncing...');
-           fetchData();
+           fetchData(undefined, false, true);
         }
       });
 
@@ -276,6 +342,7 @@ const App = () => {
     immediateSettings?: AppSettings
   ) => {
     const isManualCall = !!(immediateOrders || immediateStocks || immediateUsers || immediateProducts || immediateBrands || immediateCategories || immediateTransfers || immediateStores || immediateEmployees || immediateCustomers || immediateReceivables || immediateReceivablePayments || immediateAttendance || immediatePayrollHistory || immediatePayrollDraft || immediateSettings);
+    
     if (!supabase || !hasValidConfig || (isSyncingRef.current && !isManualCall)) return false;
     
     setSyncStatus('syncing');
@@ -345,15 +412,30 @@ const App = () => {
       }
       
       setSyncStatus('synced');
+      
       if (isManualCall) { 
         setShowSyncToast(true); 
         setTimeout(() => setShowSyncToast(false), 3000); 
-        await fetchData(); 
+        
+        // Protocol Implementation: Forced Registry Mirror Revalidation
+        // Wait 500ms for DB write-ahead log to settle before read request
+        await new Promise(r => setTimeout(r, 500));
+        
+        isSyncingRef.current = false;
+        const tablesToRefresh = [];
+        if (immediateOrders) tablesToRefresh.push('orders');
+        if (immediateStocks) tablesToRefresh.push('stocks');
+        if (immediateCustomers) tablesToRefresh.push('customers');
+        if (immediateReceivables || immediateReceivablePayments) tablesToRefresh.push('accounts_receivable', 'receivable_payments');
+        
+        // Force fresh hydration from cloud to verify data integrity immediately
+        await fetchData(tablesToRefresh.length > 0 ? tablesToRefresh : undefined, false, true); 
       }
       return true;
     } catch (err: any) {
       console.error("Master Sync Failure:", err.message);
       setSyncStatus('error');
+      isSyncingRef.current = false;
       return false;
     }
   };

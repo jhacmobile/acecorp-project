@@ -62,8 +62,8 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
 
   const [suggestions, setSuggestions] = useState<Customer[]>([]);
   const [activeSuggestionField, setActiveSuggestionField] = useState<'phone' | 'firstName' | 'lastName' | null>(null);
+  const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
 
-  // Requirement: Update threshold to 10 units for color coding
   const LOW_STOCK_THRESHOLD = 10;
   const isAdmin = user.role === UserRole.ADMIN;
 
@@ -443,6 +443,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
         setOrders(nextOrders);
         if (receiptDisplayOrder) {
           setCompletedOrder(receiptDisplayOrder);
+          setPrintCopyType('ALL');
           setIsReceiptPreviewOpen(true);
         }
         resetTerminal();
@@ -513,6 +514,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   const handleReprint = () => {
     if (!selectedHistoryOrder) return;
     setCompletedOrder(selectedHistoryOrder);
+    setPrintCopyType('ALL');
     setIsReceiptPreviewOpen(true);
   };
 
@@ -520,49 +522,56 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     const store = stores.find(s => s.id === order.storeId);
     return (
        <div className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
-          <div className="w-48 h-48 mx-auto mb-4">
-             <AceCorpLogo customUrl={logoUrl} />
+          <div className="w-48 h-auto max-h-32 mx-auto mb-0 overflow-hidden flex items-center justify-center">
+             <AceCorpLogo customUrl={logoUrl} className="w-full h-auto" />
           </div>
-          <div className="border border-black px-4 py-1 inline-block mb-4">
+          <div className="border border-black px-4 py-1 inline-block mb-1">
              <h3 className="text-[12px] font-black uppercase tracking-widest">{label}</h3>
           </div>
-          <h4 className="text-sm font-black uppercase italic leading-none mb-1 text-black">{store?.name || 'ACEGAS'}</h4>
+          <h4 className="text-sm font-black uppercase italic leading-none mb-1 text-black">{store?.name || 'ACECORP'}</h4>
           <p className="text-[10px] uppercase font-bold leading-tight text-black">{store?.address || ''}</p>
           <p className="text-[10px] uppercase font-bold text-black">{store?.mobile || ''}</p>
-          <div className="border-b border-black border-dashed my-4"></div>
+          <div className="border-b border-black border-dashed my-2"></div>
           <div className="text-left font-bold space-y-1 uppercase text-[10px] text-black">
              <div className="flex justify-between"><span>Ref:</span> <span>{order.id.slice(-8)}</span></div>
              <div className="flex justify-between"><span>Date:</span> <span>{new Date(order.createdAt).toLocaleDateString()}</span></div>
              <div className="flex justify-between"><span>Operator:</span> <span>{order.createdBy}</span></div>
              {order.riderName && <div className="flex justify-between"><span>Rider:</span> <span>{order.riderName}</span></div>}
-             <div className="pt-2"><p className="font-black text-[11px] uppercase italic text-black">{order.customerName}</p><p className="text-black">{order.address}</p></div>
+             <div className="pt-1"><p className="font-black text-[11px] uppercase italic text-black">{order.customerName}</p><p className="text-black">{order.address}</p></div>
           </div>
-          <div className="border-b border-black border-dashed my-4"></div>
-          <div className="space-y-2 mb-6">
+          <div className="border-b border-black border-dashed my-2"></div>
+          <div className="space-y-2 mb-4">
              {order.items.map((item, idx) => (
                 <div key={idx}><div className="flex justify-between font-black uppercase italic text-[10px] text-black"><span>{item.productName} (x{item.qty})</span><span>₱{formatCurrency(item.total).replace('₱','')}</span></div></div>
              ))}
           </div>
-          <div className="border-b border-black border-dashed my-4"></div>
+          <div className="border-b border-black border-dashed my-2"></div>
           <div className="flex justify-between font-bold uppercase mb-1 text-[10px] text-black"><span>Method:</span> <span>{order.paymentMethod}</span></div>
           {order.totalDiscount > 0 && (
               <div className="flex justify-between font-bold uppercase mb-1 text-[10px] text-black"><span>Discount:</span> <span>-₱{formatCurrency(order.totalDiscount).replace('₱','')}</span></div>
           )}
           <div className="flex justify-between text-[14px] font-black italic uppercase text-black"><span>TOTAL:</span> <span>₱{formatCurrency(order.totalAmount).replace('₱','')}</span></div>
           
-          <div className="mt-8 pt-4 border-t border-black border-dashed text-center text-black space-y-2">
+          <div className="mt-6 pt-2 border-t border-black border-dashed text-center text-black space-y-2">
               <p className="font-black uppercase text-[10px]">Thank you for choosing AceCorp!</p>
-              <div className="pt-8 pb-4">
+              <div className="pt-6 pb-2">
                   <p className="text-[10px] text-left border-b border-black inline-block w-full text-white">_</p>
                   <p className="text-[9px] text-center font-black uppercase mt-1">CUSTOMER SIGNATURE</p>
               </div>
           </div>
-          <div className="mt-6 pt-4 border-t border-black border-dashed text-center text-black">
+          <div className="mt-4 pt-2 border-t border-black border-dashed text-center text-black">
               <p className="font-bold uppercase text-[9px]">OFFICIAL REGISTRY COPY</p>
               <p className="font-bold uppercase text-[8px] mt-1">System Timestamp: {new Date().toLocaleTimeString()}</p>
           </div>
        </div>
     );
+  };
+
+  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    setPrintCopyType(type);
+    setTimeout(() => {
+       window.print();
+    }, 150);
   };
 
   const handleVoidOrder = async () => {
@@ -619,6 +628,18 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     return [...result, ...sorted];
   }, [products]);
 
+  const sortedProducts = useMemo(() => {
+    const base = products.filter(p => p.status === 'Active' && (activeTypeTab === 'ALL' || p.type === activeTypeTab) && p.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    return base.sort((a, b) => {
+      const stockA = getStockForStore(a.id);
+      const stockB = getStockForStore(b.id);
+      if (stockA > 0 && stockB === 0) return -1;
+      if (stockA === 0 && stockB > 0) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [products, activeTypeTab, searchQuery, stocks, user.selectedStoreId]);
+
   const filteredHistory = useMemo(() => {
     let base = orders.filter(o => String(o.storeId) === String(user.selectedStoreId) && toPHDateString(o.createdAt) === historyDate);
     if (historyStatusFilter !== 'ALL') base = base.filter(o => o.status === historyStatusFilter);
@@ -665,60 +686,31 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
             color: black !important; 
             z-index: 9999 !important;
           }
-          #pos-receipt-print-root * { 
-            visibility: visible !important; 
-            box-sizing: border-box !important;
+          .receipt-copy { 
+             display: block !important;
+             page-break-after: always !important; 
+             break-after: page !important; 
+             width: 68mm !important;
+             margin: 0 auto !important;
+             position: relative !important;
+             overflow: hidden !important;
           }
-          .receipt-copy { break-after: page; page-break-after: always; }
         }
       `}</style>
 
-      {/* ROOT-LEVEL PRINTABLE AREA FOR CONTINUOUS ROLL - TRIPLE COPY */}
+      {/* ROOT-LEVEL PRINTABLE AREA FOR CONTINUOUS ROLL */}
       <div id="pos-receipt-print-root" className="hidden">
         {completedOrder && (
           <div className="w-[80mm] bg-white">
-            {['CUSTOMER COPY', 'GATE PASS', 'STORE COPY'].map((copyLabel, idx) => (
-               <div key={idx} className="receipt-copy font-mono text-black text-center text-[10px] w-full px-[2mm] pt-2 pb-12">
-                  <div className="border border-black px-4 py-1 inline-block mb-4">
-                     <h3 className="text-[12px] font-black uppercase tracking-widest">{copyLabel}</h3>
-                  </div>
-                  <h4 className="text-lg font-black uppercase italic leading-none mb-1 text-black">{stores.find(s=>s.id===completedOrder.storeId)?.name || 'ACEGAS'}</h4>
-                  <p className="text-[10px] uppercase font-bold leading-tight text-black">{stores.find(s=>s.id===completedOrder.storeId)?.address}</p>
-                  <p className="text-[10px] uppercase font-bold text-black">{stores.find(s=>s.id===completedOrder.storeId)?.mobile}</p>
-                  <div className="border-b border-black border-dashed my-4"></div>
-                  <div className="text-left font-bold space-y-1 uppercase text-[10px] text-black">
-                     <div className="flex justify-between"><span>Ref:</span> <span>{completedOrder.id.slice(-8)}</span></div>
-                     <div className="flex justify-between"><span>Date:</span> <span>{new Date(completedOrder.createdAt).toLocaleDateString()}</span></div>
-                     <div className="flex justify-between"><span>Operator:</span> <span>{completedOrder.createdBy}</span></div>
-                     {completedOrder.riderName && <div className="flex justify-between"><span>Rider:</span> <span>{completedOrder.riderName}</span></div>}
-                     <div className="pt-2"><p className="font-black text-[12px] uppercase italic text-black">{completedOrder.customerName}</p><p className="text-black">{completedOrder.address}</p></div>
-                  </div>
-                  <div className="border-b border-black border-dashed my-4"></div>
-                  <div className="space-y-2 mb-6">
-                     {completedOrder.items.map((item, i) => (
-                        <div key={i}><div className="flex justify-between font-black uppercase italic text-[10px] text-black"><span>{item.productName} (x{item.qty})</span><span>₱{formatCurrency(item.total).replace('₱','')}</span></div></div>
-                     ))}
-                  </div>
-                  <div className="border-b border-black border-dashed my-4"></div>
-                  <div className="flex justify-between font-bold uppercase mb-1 text-[10px] text-black"><span>Method:</span> <span>{completedOrder.paymentMethod}</span></div>
-                  {completedOrder.totalDiscount > 0 && (
-                      <div className="flex justify-between font-bold uppercase mb-1 text-[10px] text-black"><span>Discount:</span> <span>-₱{formatCurrency(completedOrder.totalDiscount).replace('₱','')}</span></div>
-                  )}
-                  <div className="flex justify-between text-[16px] font-black italic uppercase text-black"><span>TOTAL:</span> <span>₱{formatCurrency(completedOrder.totalAmount).replace('₱','')}</span></div>
-                  {completedOrder.remark && (
-                      <div className="mt-4 pt-2 border-t border-black border-dashed text-left">
-                          <p className="text-[9px] font-bold uppercase text-black">REMARKS: {completedOrder.remark}</p>
-                      </div>
-                  )}
-                  <div className="mt-8 pt-4 border-t border-black border-dashed text-center text-black space-y-2">
-                      <p className="font-black uppercase text-[10px]">Thank you for choosing AceCorp!</p>
-                  </div>
-                  <div className="mt-8 pt-4 border-t border-black border-dashed text-center text-black">
-                      <p className="font-bold uppercase text-[9px]">OFFICIAL REGISTRY COPY</p>
-                      <p className="font-bold uppercase text-[8px] mt-1">System Timestamp: {new Date().toLocaleTimeString()}</p>
-                  </div>
-               </div>
-            ))}
+             {printCopyType === 'ALL' ? (
+                <>
+                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'CUSTOMER COPY')}</div>
+                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'GATE PASS')}</div>
+                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'STORE COPY')}</div>
+                </>
+             ) : (
+                <div className="receipt-copy">{generateReceiptPart(completedOrder, `${printCopyType} COPY`)}</div>
+             )}
           </div>
         )}
       </div>
@@ -765,7 +757,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
             <div className="flex-1 overflow-y-auto custom-scrollbar grid grid-cols-2 md:grid-cols-3 gap-6 pr-2">
               {products.filter(p => p.type === 'Cylinders' && p.status === 'Active').map(p => {
                 const stock = getStockForStore(p.id);
-                // Color Logic: Red(0), Orange(1-9), Green(10+)
                 const stockColor = stock === 0 ? 'text-red-500' : stock < LOW_STOCK_THRESHOLD ? 'text-orange-500' : 'text-emerald-500';
                 return (
                   <button key={p.id} onClick={() => { addToCart(p, false); setShowCylinderPicker(false); setPendingRefillProduct(null); }} disabled={stock <= 0} className={`p-6 bg-white border rounded-[32px] text-left hover:border-sky-300 hover:shadow-xl transition-all flex flex-col group ${stock <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : 'border-slate-100 shadow-sm'}`}><span className="text-[10px] font-black text-slate-800 uppercase italic leading-tight mb-2 group-hover:text-sky-600">{p.name}</span><span className="text-[14px] font-black text-slate-900 mt-auto">₱{formatCurrency(p.price)}</span><p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${stockColor}`}>{stock} Ready</p></button>
@@ -794,13 +785,19 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                  <button onClick={() => { setIsReceiptPreviewOpen(false); setCompletedOrder(null); }} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors"><i className="fas fa-times"></i></button>
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar mb-6 bg-white border border-slate-200 shadow-inner rounded-xl p-6">
-                 <div className="receipt-container font-mono text-black text-center text-xs w-[75mm] mx-auto pt-2">
-                    {generateReceiptPart(completedOrder, 'CUSTOMER COPY')}
+                 <div className="receipt-container font-mono text-black text-center text-[10px] w-full pt-2">
+                    {generateReceiptPart(completedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}
                  </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 no-print">
-                 <button onClick={() => window.print()} className="py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2"><i className="fas fa-print"></i> Authorize Print</button>
-                 <button onClick={() => { setIsReceiptPreviewOpen(false); setCompletedOrder(null); }} className="py-4 bg-sky-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-sky-700 transition-all">Next Terminal</button>
+              <div className="p-4 border-t bg-white flex flex-col gap-3 shrink-0 no-print">
+                 <div className="grid grid-cols-4 gap-2">
+                    <button onClick={() => handlePrintRequest('CUSTOMER')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'CUSTOMER' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Cust</button>
+                    <button onClick={() => handlePrintRequest('GATE')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'GATE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Gate</button>
+                    <button onClick={() => handlePrintRequest('STORE')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'STORE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Store</button>
+                    <button onClick={() => handlePrintRequest('ALL')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'ALL' ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-900 border-slate-200'}`}>ALL</button>
+                 </div>
+                 <button onClick={() => handlePrintRequest(printCopyType)} className="w-full py-4 bg-sky-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Print</button>
+                 <button onClick={() => { setIsReceiptPreviewOpen(false); setCompletedOrder(null); }} className="w-full py-4 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all">Dismiss View</button>
               </div>
            </div>
         </div>
@@ -977,9 +974,8 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 custom-scrollbar content-start">
-            {products.filter(p => p.status === 'Active' && (activeTypeTab === 'ALL' || p.type === activeTypeTab) && p.name.toLowerCase().includes(searchQuery.toLowerCase())).map(p => {
+            {sortedProducts.map(p => {
                const stock = getStockForStore(p.id);
-               // Requirement: Color coding Red(0), Orange(1-9), Green(10+)
                const stockColor = stock === 0 ? 'text-red-500' : stock < LOW_STOCK_THRESHOLD ? 'text-orange-500' : 'text-emerald-500';
                
                return (
@@ -1084,7 +1080,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
              <div className="flex-1 flex overflow-hidden">
                 <div className={`flex-[1.2] flex flex-col border-r border-slate-200 bg-white overflow-hidden ${selectedHistoryOrder ? 'hidden md:flex' : 'flex'}`}>
                    <div className="px-6 py-5 bg-white border-b border-slate-100 sticky top-0 z-20 space-y-3"><CustomDatePicker value={historyDate} onChange={setHistoryDate} className="w-full" /><select value={historyStatusFilter} onChange={(e) => setHistoryStatusFilter(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:border-sky-500 transition-all cursor-pointer text-slate-600"><option value="ALL">All Status</option><option value={OrderStatus.ORDERED}>Ordered</option><option value={OrderStatus.RECEIVABLE}>Receivable</option><option value={OrderStatus.CANCELLED}>Cancelled</option></select></div>
-                   <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-[#fcfdfe]">{filteredHistory.map(o => (<button key={o.id} onClick={() => { setSelectedHistoryOrder(o); setShowHistoryReceipt(false); }} className={`w-full flex flex-col p-4 rounded-[20px] transition-all text-left border-2 ${selectedHistoryOrder?.id === o.id ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-transparent hover:bg-slate-50'}`}><div className="flex justify-between items-start mb-2"><span className="text-[9px] font-black text-slate-800 uppercase italic">ID: {o.id.slice(-8)}</span><span className="text-[9px] font-bold text-slate-400 italic">{new Date(o.createdAt).toLocaleDateString()}</span></div><p className="text-[10px] font-black uppercase italic truncate">{o.customerName}</p><div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-50"><span className="text-[11px] font-black italic">₱{formatCurrency(o.totalAmount)}</span><span className="text-[9px] font-bold text-sky-600 uppercase italic">BY: {o.createdBy}</span><span className={`text-[8px] font-black uppercase tracking-widest ${o.status === OrderStatus.CANCELLED ? 'text-red-500' : o.status === OrderStatus.RECEIVABLE ? 'text-orange-500' : 'text-emerald-500'}`}>{o.status}</span></div></button>))}</div>
+                   <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-[#fcfdfe]">{filteredHistory.map(o => (<button key={o.id} onClick={() => { setSelectedHistoryOrder(o); setShowHistoryReceipt(false); setPrintCopyType('ALL'); }} className={`w-full flex flex-col p-4 rounded-[20px] transition-all text-left border-2 ${selectedHistoryOrder?.id === o.id ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-transparent hover:bg-slate-50'}`}><div className="flex justify-between items-start mb-2"><span className="text-[9px] font-black text-slate-800 uppercase italic">ID: {o.id.slice(-8)}</span><span className="text-[9px] font-bold text-slate-400 italic">{new Date(o.createdAt).toLocaleDateString()}</span></div><p className="text-[10px] font-black uppercase italic truncate">{o.customerName}</p><div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-50"><span className="text-[11px] font-black italic">₱{formatCurrency(o.totalAmount)}</span><span className="text-[9px] font-bold text-sky-600 uppercase italic">BY: {o.createdBy}</span><span className={`text-[8px] font-black uppercase tracking-widest ${o.status === OrderStatus.CANCELLED ? 'text-red-500' : o.status === OrderStatus.RECEIVABLE ? 'text-orange-500' : 'text-emerald-500'}`}>{o.status}</span></div></button>))}</div>
                 </div>
                 <div className={`flex-[1.8] bg-[#f8fafc] flex flex-col overflow-hidden ${!selectedHistoryOrder ? 'hidden md:flex' : 'flex'}`}>
                    {selectedHistoryOrder ? (
@@ -1101,9 +1097,17 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                               <div className="space-y-8"><div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-4"><div className="flex justify-between items-start"><div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Customer Profile</label><p className="text-[14px] font-black text-slate-800 uppercase italic">{selectedHistoryOrder.customerName}</p></div><div className="text-right">{selectedHistoryOrder.riderName && (<div className="mb-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Logistics</label><p className="text-[12px] font-black text-sky-600 uppercase italic">{selectedHistoryOrder.riderName}</p></div>)}<div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Operator (User ID)</label><p className="text-[12px] font-black text-slate-700 uppercase italic">{selectedHistoryOrder.createdBy}</p></div></div></div><div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Address</label><p className="text-[11px] font-bold text-slate-600 uppercase italic">{selectedHistoryOrder.address}</p></div><div className="flex justify-between"><div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Settlement Method</label><p className="text-[11px] font-black text-emerald-600 uppercase italic">{selectedHistoryOrder.paymentMethod}</p></div></div>{selectedHistoryOrder.remark && (<div className="pt-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Session Remarks</label><p className="text-[11px] font-black text-amber-600 uppercase italic bg-amber-50 p-2 rounded-lg border border-amber-100">{selectedHistoryOrder.remark}</p></div>)}</div><div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden"><table className="w-full text-left font-bold text-gray-900"><thead className="bg-slate-50/50 border-b border-slate-100"><tr className="text-[9px] font-black text-slate-400 uppercase"><th className="px-8 py-4">Asset Detail</th><th className="px-8 py-4 text-right">Value</th></tr></thead><tbody className="divide-y divide-slate-100">{selectedHistoryOrder.items.map((item, idx) => (<tr key={idx}><td className="px-8 py-4"><span className="text-[12px] font-black uppercase italic text-slate-800">{item.productName} (x{item.qty})</span></td><td className="px-8 py-4 text-right text-[12px] font-black italic text-slate-900">₱{formatCurrency(item.total).replace('₱','')}</td></tr>))}</tbody></table></div><div className="space-y-2">{selectedHistoryOrder.totalDiscount > 0 && (<div className="flex justify-between items-center px-8 text-[11px] font-bold text-slate-400 uppercase tracking-widest"><span>Applied Discount</span><span className="text-emerald-500">- ₱{formatCurrency(selectedHistoryOrder.totalDiscount)}</span></div>)}<div className="p-6 bg-slate-950 rounded-[32px] flex justify-between items-center text-white shadow-2xl"><span className="text-[11px] font-black uppercase tracking-widest italic">Settlement Total</span><span className="text-3xl font-black italic">₱{formatCurrency(selectedHistoryOrder.totalAmount)}</span></div></div></div>
                            )}
                         </div>
-                        <div className="p-8 border-t bg-white grid grid-cols-3 gap-3 shrink-0 relative">
+                        <div className="p-8 border-t bg-white grid grid-cols-3 gap-3 shrink-0 relative no-print">
                            <button onClick={handleModifyOrder} disabled={selectedHistoryOrder.status === OrderStatus.CANCELLED} className="py-5 bg-[#2d5da7] text-white rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all disabled:opacity-30">Modify Order</button>
-                           <button onClick={handleReprint} className="py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><i className="fas fa-print"></i> Reprint</button>
+                           <div className="flex flex-col gap-2">
+                              <div className="grid grid-cols-4 gap-1">
+                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setPrintCopyType('CUSTOMER'); setTimeout(() => window.print(), 100); }} className={`py-2 rounded-lg text-[8px] font-black transition-all border ${printCopyType === 'CUSTOMER' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white border-slate-200'}`}>CUST</button>
+                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setPrintCopyType('GATE'); setTimeout(() => window.print(), 100); }} className={`py-2 rounded-lg text-[8px] font-black transition-all border ${printCopyType === 'GATE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white border-slate-200'}`}>GATE</button>
+                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setPrintCopyType('STORE'); setTimeout(() => window.print(), 100); }} className={`py-2 rounded-lg text-[8px] font-black transition-all border ${printCopyType === 'STORE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white border-slate-200'}`}>STOR</button>
+                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setPrintCopyType('ALL'); setTimeout(() => window.print(), 100); }} className={`py-2 rounded-lg text-[8px] font-black transition-all border ${printCopyType === 'ALL' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200'}`}>ALL</button>
+                              </div>
+                              <button onClick={handleReprint} className="py-3 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><i className="fas fa-print"></i> Quick ALL</button>
+                           </div>
                            {isAdmin && (
                               <button onClick={handleVoidOrder} disabled={selectedHistoryOrder.status === OrderStatus.CANCELLED} className="py-5 bg-white border-2 border-red-100 text-red-500 rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all hover:bg-red-50 disabled:opacity-30 disabled:border-slate-100 disabled:text-slate-300">Void Order</button>
                            )}

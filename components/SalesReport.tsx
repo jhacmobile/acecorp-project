@@ -50,7 +50,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
   const [showOrderReceipt, setShowOrderReceipt] = useState(false);
   const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
   
-  // Pagination State - 25 items per page for Audit
+  // Pagination State - 25 items per turn
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 25;
 
@@ -109,17 +109,6 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     return base.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
   }, [orders, user.selectedStoreId, date, reportPeriod, statusFilter, paymentFilter, hasGlobalAccess, searchQuery]);
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [date, reportPeriod, auditMode, statusFilter, paymentFilter, searchQuery]);
-
-  const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
-  const paginatedOrders = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredOrders.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredOrders, currentPage]);
-
   const arCollectionRegistry = useMemo(() => {
     const anchor = new Date(date);
     const payments = receivablePayments.filter(rp => {
@@ -146,12 +135,22 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     }).filter(item => !!item.order).sort((a,b) => b.payment.paidAt.localeCompare(a.payment.paidAt));
   }, [receivablePayments, receivables, orders, date, reportPeriod, hasGlobalAccess, user.selectedStoreId]);
 
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [date, reportPeriod, auditMode, statusFilter, paymentFilter, searchQuery]);
+
+  const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredOrders.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredOrders, currentPage]);
+
+  const arTotalPages = Math.ceil(arCollectionRegistry.length / ITEMS_PER_PAGE);
   const paginatedAR = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return arCollectionRegistry.slice(start, start + ITEMS_PER_PAGE);
   }, [arCollectionRegistry, currentPage]);
-
-  const arTotalPages = Math.ceil(arCollectionRegistry.length / ITEMS_PER_PAGE);
 
   const stats = useMemo(() => {
     const revenueOrders = filteredOrders.filter(o => o.status === OrderStatus.ORDERED);
@@ -168,9 +167,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     const store = stores.find(s => s.id === order.storeId);
     return (
        <div className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
-          <div className="w-48 h-48 mx-auto mb-4">
-             <AceCorpLogo customUrl={logoUrl} />
-          </div>
+          <div className="w-48 h-auto max-h-32 mx-auto mb-0 overflow-hidden flex items-center justify-center"><AceCorpLogo customUrl={logoUrl} className="w-full h-auto" /></div>
           <div className="border border-black px-4 py-1 inline-block mb-1"><h3 className="text-[12px] font-black uppercase tracking-widest">{label}</h3></div>
           <h4 className="text-sm font-black uppercase italic leading-none mb-1 text-black">{store?.name || 'ACECORP'}</h4>
           <p className="text-[10px] uppercase font-bold leading-tight text-black">{store?.address || ''}</p>
@@ -207,19 +204,9 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     );
   };
 
-  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    if (type === 'ALL') {
-      const copies: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
-      for (const copy of copies) {
-        setPrintCopyType(copy);
-        await new Promise(resolve => setTimeout(resolve, 250));
-        window.print();
-        await new Promise(resolve => setTimeout(resolve, 250));
-      }
-    } else {
-      setPrintCopyType(type);
-      setTimeout(() => { window.print(); }, 150);
-    }
+  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    setPrintCopyType(type);
+    setTimeout(() => { window.print(); }, 150);
   };
 
   const formatCurrency = (val: number) => `₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -230,27 +217,23 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden text-slate-900 font-sans">
       <style>{`
         @media print {
-          @page { 
-            size: A4 portrait; 
-            margin: 15mm; 
-          }
-          
-          html, body, #root, [class*="flex-1"], main, section, div {
-            height: auto !important;
-            min-height: 0 !important;
-            max-height: none !important;
-            overflow: visible !important;
-            display: block !important;
-            position: static !important;
-            width: auto !important;
-          }
-
+          @page { size: portrait; margin: 10mm; }
           body * { visibility: hidden !important; }
 
-          body:has(#audit-thermal-print-root:not(.hidden)) #audit-manifest-report-root {
-            display: none !important;
+          /* Full Audit Manifest Print Override */
+          #audit-manifest-report-root, #audit-manifest-report-root * { 
+            visibility: visible !important; 
+            display: block !important; 
+          }
+          #audit-manifest-report-root { 
+             position: absolute !important; 
+             left: 0; top: 0; 
+             width: 100% !important; 
+             background: white !important; 
+             color: black !important;
           }
 
+          /* Thermal Receipt Logic */
           #audit-thermal-print-root, #audit-thermal-print-root * { 
             visibility: visible !important; 
             display: block !important; 
@@ -262,141 +245,104 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
             width: 80mm !important; 
             background: white !important; 
           }
-          #audit-thermal-print-root .receipt-copy { 
-            width: 68mm !important; 
-            margin: 0 auto !important; 
-            break-after: page; 
-            page-break-after: always; 
-            display: block !important; 
+          .receipt-copy { 
+             display: block !important;
+             page-break-after: always !important; 
+             break-after: page !important; 
+             width: 68mm !important;
+             margin: 0 auto !important;
+             overflow: hidden !important;
+             position: relative !important;
           }
           
-          #audit-manifest-report-root, #audit-manifest-report-root * { 
-            visibility: visible !important; 
-          }
-          #audit-manifest-report-root { 
-            position: static !important; 
-            width: 100% !important; 
-            display: block !important;
-            background: white !important; 
-            color: black !important; 
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          #audit-manifest-report-root .report-container { 
-            width: 100% !important; 
-            padding: 5mm !important; 
-          }
-          
-          #audit-manifest-report-root table { 
-            width: 100% !important; 
-            border-collapse: collapse !important; 
-            display: table !important;
-            table-layout: auto !important;
-            page-break-inside: auto !important;
-          }
-          
-          #audit-manifest-report-root thead { 
-            display: table-header-group !important;
-          }
-          
-          #audit-manifest-report-root tr { 
-            display: table-row !important; 
-            page-break-inside: avoid !important;
-            page-break-after: auto !important;
-          }
-          
-          #audit-manifest-report-root th, #audit-manifest-report-root td { 
-            display: table-cell !important;
-            border-bottom: 1px solid #000 !important; 
-            padding: 10px 8px !important; 
-            text-align: left !important;
-            font-size: 10px !important;
-          }
-
           .no-print { display: none !important; }
         }
       `}</style>
       
+      {/* FULL MANIFEST REPORT PRINT ROOT (A4/Portrait) */}
+      <div id="audit-manifest-report-root" className="hidden">
+         <div className="text-center mb-8 border-b-2 border-black pb-4">
+            <h1 className="text-2xl font-black uppercase italic">{headerName}</h1>
+            <h2 className="text-sm font-black uppercase tracking-[0.3em] mt-2">Registry Audit Manifest</h2>
+            <p className="text-[10px] font-bold mt-1">Reference: {date} | Scope: {reportPeriod.toUpperCase()} | Focus: {auditMode}</p>
+         </div>
+
+         {auditMode === 'SALES' ? (
+           <table className="w-full text-left border-collapse">
+              <thead>
+                 <tr className="border-b-2 border-black text-[9px] font-black uppercase">
+                    <th className="py-2">Timestamp</th>
+                    <th className="py-2">Ticket #</th>
+                    <th className="py-2">Entity Profile</th>
+                    <th className="py-2">Method</th>
+                    <th className="py-2">Operator</th>
+                    <th className="py-2 text-center">Status</th>
+                    <th className="py-2 text-right">Settlement</th>
+                 </tr>
+              </thead>
+              <tbody className="text-[9px] font-bold uppercase italic">
+                 {filteredOrders.map(o => (
+                    <tr key={o.id} className="border-b border-black border-dotted">
+                       <td className="py-3">{toPHDateString(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                       <td className="py-3">#{o.id.slice(-8)}</td>
+                       <td className="py-3">{o.customerName}</td>
+                       <td className="py-3">{o.paymentMethod}</td>
+                       <td className="py-3">{o.createdBy}</td>
+                       <td className="py-3 text-center">{o.status}</td>
+                       <td className="py-3 text-right">{formatCurrency(o.totalAmount)}</td>
+                    </tr>
+                 ))}
+              </tbody>
+           </table>
+         ) : (
+           <table className="w-full text-left border-collapse">
+              <thead>
+                 <tr className="border-b-2 border-black text-[9px] font-black uppercase">
+                    <th className="py-2">Timestamp</th>
+                    <th className="py-2">PAY #</th>
+                    <th className="py-2">Customer Profile</th>
+                    <th className="py-2">Method</th>
+                    <th className="py-2 text-right">Amount</th>
+                 </tr>
+              </thead>
+              <tbody className="text-[10px] font-bold uppercase italic">
+                 {arCollectionRegistry.map((item, i) => (
+                    <tr key={i} className="border-b border-black border-dotted">
+                       <td className="py-3">{toPHDateString(item.payment.paidAt)}</td>
+                       <td className="py-3">PAY-{item.payment.id.slice(-4)}</td>
+                       <td className="py-3">{item.order?.customerName}</td>
+                       <td className="py-3">{item.payment.paymentMethod}</td>
+                       <td className="py-3 text-right">{formatCurrency(item.payment.amount)}</td>
+                    </tr>
+                 ))}
+              </tbody>
+           </table>
+         )}
+
+         <div className="mt-10 pt-4 border-t-2 border-black flex justify-between items-baseline">
+            <div className="text-[9px] font-black uppercase">
+               <p>Audit Total Inflow: {formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</p>
+               <p>Generated by: {user.username}</p>
+            </div>
+            <p className="text-[8px] font-bold uppercase">System Lock: {new Date().toLocaleString()}</p>
+         </div>
+      </div>
+
       {/* THERMAL PRINT ROOT */}
       <div id="audit-thermal-print-root" className={selectedOrder ? "block" : "hidden"}>
          {selectedOrder && (
            <div className="w-[80mm] bg-white">
-              {(printCopyType === 'ALL' || printCopyType === 'CUSTOMER') && generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}
-              {(printCopyType === 'ALL' || printCopyType === 'GATE') && generateReceiptPart(selectedOrder, 'GATE PASS')}
-              {(printCopyType === 'ALL' || printCopyType === 'STORE') && generateReceiptPart(selectedOrder, 'STORE COPY')}
+              {printCopyType === 'ALL' ? (
+                <>
+                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}</div>
+                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'GATE PASS')}</div>
+                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'STORE COPY')}</div>
+                </>
+              ) : (
+                <div className="receipt-copy">{generateReceiptPart(selectedOrder, `${printCopyType} COPY`)}</div>
+              )}
            </div>
          )}
-      </div>
-
-      {/* SALES MANIFEST ROOT - CRITICAL: Targets COMPLETE ARRAY for unpaginated printing */}
-      <div id="audit-manifest-report-root" className={selectedOrder ? "hidden" : "hidden text-black font-sans"}>
-          <div className="report-container">
-             <div className="text-center mb-10 border-b-4 border-black pb-8">
-                <h1 className="text-3xl font-black uppercase italic tracking-tighter mb-2">{headerName}</h1>
-                <p className="text-sm font-bold uppercase tracking-[0.3em] opacity-80">Master Audit Registry • Sales Manifest (COMPLETE)</p>
-                <div className="mt-8 flex justify-center items-center gap-12 text-[10px] font-black uppercase">
-                   <div className="flex flex-col"><span className="opacity-40">Period</span><span>{reportPeriod.toUpperCase()}</span></div>
-                   <div className="flex flex-col"><span className="opacity-40">Registry Date</span><span>{date}</span></div>
-                   <div className="flex flex-col text-sky-600"><span className="opacity-40">Audit Op</span><span>{user.username}</span></div>
-                </div>
-             </div>
-             
-             <div className="grid grid-cols-2 gap-10 mb-12 py-8 bg-slate-50/50 rounded-[20px] border border-black/5 px-10">
-                <div className="space-y-4">
-                   <p className="text-[10px] font-black uppercase text-slate-400 border-b border-black/10 pb-2">Fiscal Performance Summary</p>
-                   <div className="flex justify-between text-xs"><span>Total Records in Period:</span> <b>{filteredOrders.length} Entries</b></div>
-                   <div className="flex justify-between text-xs"><span>Booked Revenue:</span> <b>{formatCurrency(stats.totalSales + stats.newARGenerated)}</b></div>
-                   <div className="flex justify-between text-xs text-emerald-600"><span>AR Collections:</span> <b>{formatCurrency(stats.arCollectionsTotal)}</b></div>
-                   <div className="flex justify-between font-black text-xl border-t-2 border-black pt-4 mt-2"><span>Liquid Inflow:</span> <span>{formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</span></div>
-                </div>
-                <div className="border-l border-black/10 pl-12 space-y-3">
-                   <p className="text-[10px] font-black uppercase text-slate-400 border-b border-black/10 pb-2">Settlement Distribution</p>
-                   {Object.entries(stats.paymentBreakdown).map(([m, val]) => (
-                      <div key={m} className="flex justify-between text-[11px] font-bold"><span>{m}:</span> <b>{formatCurrency(val as number)}</b></div>
-                   ))}
-                </div>
-             </div>
-
-             <table className="w-full">
-                <thead>
-                   <tr className="bg-slate-100 border-y-2 border-black">
-                      <th className="p-3 text-[10px] font-black uppercase text-left">Time</th>
-                      <th className="p-3 text-[10px] font-black uppercase text-left">Ticket #</th>
-                      <th className="p-3 text-[10px] font-black uppercase text-left">Entity Profile</th>
-                      <th className="p-3 text-[10px] font-black uppercase text-left">Method</th>
-                      <th className="p-3 text-[10px] font-black uppercase text-center">Status</th>
-                      <th className="p-3 text-[10px] font-black uppercase text-right">Settlement</th>
-                   </tr>
-                </thead>
-                <tbody className="divide-y divide-black/10">
-                   {filteredOrders.map(o => (
-                      <tr key={o.id}>
-                         <td className="p-3 text-[10px] font-mono text-left font-bold">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
-                         <td className="p-3 text-[10px] font-mono font-black text-left text-sky-700">#{o.id.slice(-8)}</td>
-                         <td className="p-3 text-[10px] uppercase font-black text-left truncate max-w-[250px]">{o.customerName}</td>
-                         <td className="p-3 text-[10px] font-bold text-left">{o.paymentMethod}</td>
-                         <td className="p-3 text-center text-[9px] font-black uppercase italic">{o.status}</td>
-                         <td className="p-3 text-right font-black italic text-[11px]">{formatCurrency(o.totalAmount)}</td>
-                      </tr>
-                   ))}
-                </tbody>
-             </table>
-
-             <div className="mt-24 flex justify-between items-end border-t-2 border-dashed border-black/30 pt-12 text-[10px] uppercase font-black">
-                <div className="space-y-8">
-                  <div>
-                    <p className="opacity-40 mb-10">Authenticated & Prepared By:</p>
-                    <div className="w-64 border-b-2 border-black mb-2"></div>
-                    <p className="text-sky-600">ID: {user.username}</p>
-                  </div>
-                </div>
-                <div className="text-right space-y-2">
-                  <p className="opacity-40">Audit Mirror Information</p>
-                  <p>Generated: {new Date().toLocaleString()}</p>
-                  <p className="font-mono text-[9px] tracking-tight">ACECORP_SECURE_AUDIT_V4.0</p>
-                </div>
-             </div>
-          </div>
       </div>
 
       <div className="px-8 py-5 bg-[#050810] text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 gap-4 sm:gap-0 no-print">
@@ -419,7 +365,6 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                ))}
             </div>
          </div>
-         <button onClick={() => { setSelectedOrder(null); setShowOrderReceipt(false); setTimeout(() => window.print(), 100); }} className="relative z-10 bg-[#2d89c8] hover:bg-sky-500 px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95">Generate Audit Manifest</button>
       </div>
 
       <div className="flex-1 flex overflow-hidden min-h-0 no-print">
@@ -436,6 +381,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   </div>
                   <div className="space-y-3"><label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Reference Date</label><CustomDatePicker value={date} onChange={setDate} className="w-full" /></div>
                   <div className="space-y-3 p-6 bg-slate-50 rounded-[32px] border border-slate-100"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Registry Type</label><div className="flex gap-2 p-1 bg-white rounded-xl shadow-sm">{(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (<button key={p} onClick={() => setReportPeriod(p)} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${reportPeriod === p ? 'bg-[#2d89c8] text-white shadow-md' : 'text-slate-400'}`}>{p}</button>))}</div></div>
+                  <button onClick={() => window.print()} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-[9px] shadow-xl flex items-center justify-center gap-2 hover:bg-slate-800 transition-all"><i className="fas fa-print"></i> Full Audit Report</button>
                </div>
             </div>
          </aside>
@@ -448,7 +394,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                </div>
                <div className="flex items-center gap-3">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    {auditMode === 'SALES' ? filteredOrders.length : arCollectionRegistry.length} Total Records Analyzed
+                    Page {currentPage} of {auditMode === 'SALES' ? totalPages || 1 : arTotalPages || 1}
                   </span>
                </div>
             </div>
@@ -478,7 +424,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   </table>
                </div>
                
-               {/* Pagination Controls - Egress Control Implementation */}
+               {/* Pagination Controls */}
                {((auditMode === 'SALES' && totalPages > 1) || (auditMode === 'AR_COLLECTION' && arTotalPages > 1)) && (
                  <div className="mt-8 flex items-center justify-between shrink-0 bg-white px-4">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -526,8 +472,8 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                            <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                               <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Personnel Profile</label><p className="text-[14px] font-black text-slate-800 uppercase italic">{selectedOrder.customerName}</p></div>
                               <div className="text-left sm:text-right">
-                                 {selectedOrder.riderName && (<div className="mb-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Logistics</label><p className="text-[10px] sm:text-[12px] font-black text-sky-600 uppercase italic">{selectedOrder.riderName}</p></div>)}
-                                 <div><label className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Operator (User ID)</label><p className="text-[12px] font-black text-slate-700 uppercase italic">{selectedOrder.createdBy}</p></div>
+                                 {selectedOrder.riderName && (<div className="mb-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Logistics</label><p className="text-[12px] font-black text-sky-600 uppercase italic">{selectedOrder.riderName}</p></div>)}
+                                 <div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Operator (User ID)</label><p className="text-[12px] font-black text-slate-700 uppercase italic">{selectedOrder.createdBy}</p></div>
                               </div>
                            </div>
                            <div className="pt-2 border-t border-slate-50 flex justify-between items-center"><div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Settlement Method</label><p className="text-[11px] font-black text-emerald-600 uppercase italic">{selectedOrder.paymentMethod}</p></div><span className={`px-2 py-1 rounded text-[7px] sm:text-[8px] font-black uppercase tracking-widest border ${selectedOrder.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : selectedOrder.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-500'}`}>{selectedOrder.status}</span></div>
@@ -538,7 +484,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                               <tbody className="divide-y divide-slate-100">{selectedOrder.items.map((item, idx) => (<tr key={idx}><td className="px-8 py-4"><span className="text-[12px] font-black uppercase italic text-slate-800">{item.productName} (x{item.qty})</span></td><td className="px-8 py-4 text-right text-[12px] font-black italic text-slate-900">₱{formatCurrency(item.total).replace('₱','')}</td></tr>))}</tbody>
                            </table>
                         </div>
-                        <div className="p-6 bg-slate-950 rounded-[32px] flex justify-between items-center text-white shadow-2xl"><span className="text-[9px] font-black uppercase italic opacity-50">Registry Settlement</span><span className="text-2xl font-black italic">{formatCurrency(selectedOrder.totalAmount)}</span></div>
+                        <div className="p-6 bg-slate-950 rounded-[32px] flex justify-between items-center text-white shadow-2xl mt-4"><span className="text-[9px] font-black uppercase italic opacity-50">Registry Settlement</span><span className="text-2xl font-black italic">{formatCurrency(selectedOrder.totalAmount)}</span></div>
                     </div>
                   )}
                </div>
@@ -546,12 +492,12 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   {showOrderReceipt ? (
                     <div className="space-y-3">
                       <div className="grid grid-cols-4 gap-2">
-                         <button onClick={() => handlePrintRequest('CUSTOMER')} className="py-2.5 bg-white border-2 border-slate-200 text-slate-900 rounded-xl font-black uppercase text-[8px] hover:bg-slate-50 transition-all">Cust</button>
-                         <button onClick={() => handlePrintRequest('GATE')} className="py-2.5 bg-white border-2 border-slate-200 text-slate-900 rounded-xl font-black uppercase text-[8px] hover:bg-slate-50 transition-all">Gate</button>
-                         <button onClick={() => handlePrintRequest('STORE')} className="py-2.5 bg-white border-2 border-slate-200 text-slate-900 rounded-xl font-black uppercase text-[8px] hover:bg-slate-50 transition-all">Store</button>
-                         <button onClick={() => handlePrintRequest('ALL')} className="py-2.5 bg-slate-950 text-white rounded-xl font-black uppercase text-[8px] shadow-lg">ALL</button>
+                         <button onClick={() => handlePrintRequest('CUSTOMER')} className={`py-2.5 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'CUSTOMER' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Cust</button>
+                         <button onClick={() => handlePrintRequest('GATE')} className={`py-2.5 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'GATE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Gate</button>
+                         <button onClick={() => handlePrintRequest('STORE')} className={`py-2.5 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'STORE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Store</button>
+                         <button onClick={() => handlePrintRequest('ALL')} className={`py-2.5 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'ALL' ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-900 border-slate-200'}`}>ALL</button>
                       </div>
-                      <button onClick={() => handlePrintRequest(printCopyType)} className="w-full py-4 bg-sky-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-2"><i className="fas fa-print"></i> Authorize Print</button>
+                      <button onClick={() => handlePrintRequest(printCopyType)} className="w-full py-4 bg-sky-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95"><i className="fas fa-print"></i> Authorize Print</button>
                     </div>
                   ) : (
                     <button onClick={() => { setShowOrderReceipt(true); setPrintCopyType('ALL'); }} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[10px] shadow-xl">Reprint Manifest</button>

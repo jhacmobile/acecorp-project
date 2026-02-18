@@ -2,14 +2,13 @@
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * ACECORP ENTERPRISE - CLOUD PERSISTENCE ADAPTER (V2.1.0)
- * Updated for project migration and rebranding to AceCorp.
+ * ACECORP ENTERPRISE - CLOUD PERSISTENCE ADAPTER (V2.7.0)
+ * Hardened for Google Chrome Cache Neutralization & Real-time Integrity
  */
 
 const VITE_URL = (import.meta as any).env?.VITE_SUPABASE_URL;
 const VITE_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
 
-// NEW PROJECT CREDENTIALS (iwnrckpwruufcniqydqt)
 const NEW_PROJECT_URL = 'https://iwnrckpwruufcniqydqt.supabase.co'; 
 const NEW_PROJECT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3bnJja3B3cnV1ZmNuaXF5ZHF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNTM5NzcsImV4cCI6MjA4NjkyOTk3N30.e5X8eqfphv8PCKcuizOz3ffcBD7yWuGBzALtaUVCngU';
 
@@ -26,9 +25,17 @@ if (hasValidConfig) {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
+      },
+      global: {
+        // Force absolute revalidation for every request to ensure data integrity
+        headers: { 
+          'Cache-Control': 'no-cache, no-store, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
       }
     });
-    console.log('AceCorp Core: Cloud database link established with project iwnrckpwruufcniqydqt.');
+    console.log('AceCorp Core: Cloud database link established (V2.7 Cache-Neutral Layer Active).');
   } catch (e) {
     console.error("AceCorp Core: Supabase initialization error.", e);
   }

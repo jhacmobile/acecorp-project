@@ -62,8 +62,8 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
 
   const [suggestions, setSuggestions] = useState<Customer[]>([]);
   const [activeSuggestionField, setActiveSuggestionField] = useState<'phone' | 'firstName' | 'lastName' | null>(null);
+  const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
 
-  // Threshold update requested: below 10 is low stock
   const LOW_STOCK_THRESHOLD = 10;
   const isAdmin = user.role === UserRole.ADMIN;
 
@@ -443,6 +443,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
         setOrders(nextOrders);
         if (receiptDisplayOrder) {
           setCompletedOrder(receiptDisplayOrder);
+          setPrintCopyType('ALL');
           setIsReceiptPreviewOpen(true);
         }
         resetTerminal();
@@ -513,6 +514,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   const handleReprint = () => {
     if (!selectedHistoryOrder) return;
     setCompletedOrder(selectedHistoryOrder);
+    setPrintCopyType('ALL');
     setIsReceiptPreviewOpen(true);
   };
 
@@ -563,6 +565,13 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
           </div>
        </div>
     );
+  };
+
+  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    setPrintCopyType(type);
+    setTimeout(() => {
+       window.print();
+    }, 150);
   };
 
   const handleVoidOrder = async () => {
@@ -619,19 +628,14 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     return [...result, ...sorted];
   }, [products]);
 
-  // Enhanced product filtering and sorting logic
   const sortedProducts = useMemo(() => {
     const base = products.filter(p => p.status === 'Active' && (activeTypeTab === 'ALL' || p.type === activeTypeTab) && p.name.toLowerCase().includes(searchQuery.toLowerCase()));
     
     return base.sort((a, b) => {
       const stockA = getStockForStore(a.id);
       const stockB = getStockForStore(b.id);
-      
-      // Tier 1: In Stock vs Depleted
       if (stockA > 0 && stockB === 0) return -1;
       if (stockA === 0 && stockB > 0) return 1;
-      
-      // Tier 2: Alphabetical Maintenance within tiers
       return a.name.localeCompare(b.name);
     });
   }, [products, activeTypeTab, searchQuery, stocks, user.selectedStoreId]);
@@ -698,9 +702,15 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
       <div id="pos-receipt-print-root" className="hidden">
         {completedOrder && (
           <div className="w-[80mm] bg-white">
-             {['CUSTOMER COPY', 'GATE PASS', 'STORE COPY'].map((label, idx) => (
-               <div key={idx} className="receipt-copy">{generateReceiptPart(completedOrder, label)}</div>
-             ))}
+             {printCopyType === 'ALL' ? (
+                <>
+                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'CUSTOMER COPY')}</div>
+                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'GATE PASS')}</div>
+                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'STORE COPY')}</div>
+                </>
+             ) : (
+                <div className="receipt-copy">{generateReceiptPart(completedOrder, `${printCopyType} COPY`)}</div>
+             )}
           </div>
         )}
       </div>
@@ -747,7 +757,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
             <div className="flex-1 overflow-y-auto custom-scrollbar grid grid-cols-2 md:grid-cols-3 gap-6 pr-2">
               {products.filter(p => p.type === 'Cylinders' && p.status === 'Active').map(p => {
                 const stock = getStockForStore(p.id);
-                // Color states: Red (0), Orange (1-9), Green (10+)
                 const stockColor = stock === 0 ? 'text-red-500' : stock < LOW_STOCK_THRESHOLD ? 'text-orange-500' : 'text-emerald-500';
                 return (
                   <button key={p.id} onClick={() => { addToCart(p, false); setShowCylinderPicker(false); setPendingRefillProduct(null); }} disabled={stock <= 0} className={`p-6 bg-white border rounded-[32px] text-left hover:border-sky-300 hover:shadow-xl transition-all flex flex-col group ${stock <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : 'border-slate-100 shadow-sm'}`}><span className="text-[10px] font-black text-slate-800 uppercase italic leading-tight mb-2 group-hover:text-sky-600">{p.name}</span><span className="text-[14px] font-black text-slate-900 mt-auto">₱{formatCurrency(p.price)}</span><p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${stockColor}`}>{stock} Ready</p></button>
@@ -777,11 +786,17 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar mb-6 bg-white border border-slate-200 shadow-inner rounded-xl p-6">
                  <div className="receipt-container font-mono text-black text-center text-[10px] w-full pt-2">
-                    {generateReceiptPart(completedOrder, 'CUSTOMER COPY')}
+                    {generateReceiptPart(completedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}
                  </div>
               </div>
               <div className="p-4 border-t bg-white flex flex-col gap-3 shrink-0 no-print">
-                 <button onClick={() => window.print()} className="w-full py-4 bg-sky-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Print</button>
+                 <div className="grid grid-cols-4 gap-2">
+                    <button onClick={() => handlePrintRequest('CUSTOMER')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'CUSTOMER' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Cust</button>
+                    <button onClick={() => handlePrintRequest('GATE')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'GATE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Gate</button>
+                    <button onClick={() => handlePrintRequest('STORE')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'STORE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Store</button>
+                    <button onClick={() => handlePrintRequest('ALL')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'ALL' ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-900 border-slate-200'}`}>ALL</button>
+                 </div>
+                 <button onClick={() => handlePrintRequest(printCopyType)} className="w-full py-4 bg-sky-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Print</button>
                  <button onClick={() => { setIsReceiptPreviewOpen(false); setCompletedOrder(null); }} className="w-full py-4 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all">Dismiss View</button>
               </div>
            </div>
@@ -961,7 +976,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
           <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 custom-scrollbar content-start">
             {sortedProducts.map(p => {
                const stock = getStockForStore(p.id);
-               // Color logic: Red (0), Orange (1-9), Green (10+)
                const stockColor = stock === 0 ? 'text-red-500' : stock < LOW_STOCK_THRESHOLD ? 'text-orange-500' : 'text-emerald-500';
                
                return (
@@ -1066,7 +1080,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
              <div className="flex-1 flex overflow-hidden">
                 <div className={`flex-[1.2] flex flex-col border-r border-slate-200 bg-white overflow-hidden ${selectedHistoryOrder ? 'hidden md:flex' : 'flex'}`}>
                    <div className="px-6 py-5 bg-white border-b border-slate-100 sticky top-0 z-20 space-y-3"><CustomDatePicker value={historyDate} onChange={setHistoryDate} className="w-full" /><select value={historyStatusFilter} onChange={(e) => setHistoryStatusFilter(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:border-sky-500 transition-all cursor-pointer text-slate-600"><option value="ALL">All Status</option><option value={OrderStatus.ORDERED}>Ordered</option><option value={OrderStatus.RECEIVABLE}>Receivable</option><option value={OrderStatus.CANCELLED}>Cancelled</option></select></div>
-                   <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-[#fcfdfe]">{filteredHistory.map(o => (<button key={o.id} onClick={() => { setSelectedHistoryOrder(o); setShowHistoryReceipt(false); }} className={`w-full flex flex-col p-4 rounded-[20px] transition-all text-left border-2 ${selectedHistoryOrder?.id === o.id ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-transparent hover:bg-slate-50'}`}><div className="flex justify-between items-start mb-2"><span className="text-[9px] font-black text-slate-800 uppercase italic">ID: {o.id.slice(-8)}</span><span className="text-[9px] font-bold text-slate-400 italic">{new Date(o.createdAt).toLocaleDateString()}</span></div><p className="text-[10px] font-black uppercase italic truncate">{o.customerName}</p><div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-50"><span className="text-[11px] font-black italic">₱{formatCurrency(o.totalAmount)}</span><span className="text-[9px] font-bold text-sky-600 uppercase italic">BY: {o.createdBy}</span><span className={`text-[8px] font-black uppercase tracking-widest ${o.status === OrderStatus.CANCELLED ? 'text-red-500' : o.status === OrderStatus.RECEIVABLE ? 'text-orange-500' : 'text-emerald-500'}`}>{o.status}</span></div></button>))}</div>
+                   <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-[#fcfdfe]">{filteredHistory.map(o => (<button key={o.id} onClick={() => { setSelectedHistoryOrder(o); setShowHistoryReceipt(false); setPrintCopyType('ALL'); }} className={`w-full flex flex-col p-4 rounded-[20px] transition-all text-left border-2 ${selectedHistoryOrder?.id === o.id ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-transparent hover:bg-slate-50'}`}><div className="flex justify-between items-start mb-2"><span className="text-[9px] font-black text-slate-800 uppercase italic">ID: {o.id.slice(-8)}</span><span className="text-[9px] font-bold text-slate-400 italic">{new Date(o.createdAt).toLocaleDateString()}</span></div><p className="text-[10px] font-black uppercase italic truncate">{o.customerName}</p><div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-50"><span className="text-[11px] font-black italic">₱{formatCurrency(o.totalAmount)}</span><span className="text-[9px] font-bold text-sky-600 uppercase italic">BY: {o.createdBy}</span><span className={`text-[8px] font-black uppercase tracking-widest ${o.status === OrderStatus.CANCELLED ? 'text-red-500' : o.status === OrderStatus.RECEIVABLE ? 'text-orange-500' : 'text-emerald-500'}`}>{o.status}</span></div></button>))}</div>
                 </div>
                 <div className={`flex-[1.8] bg-[#f8fafc] flex flex-col overflow-hidden ${!selectedHistoryOrder ? 'hidden md:flex' : 'flex'}`}>
                    {selectedHistoryOrder ? (
@@ -1083,9 +1097,17 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                               <div className="space-y-8"><div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-4"><div className="flex justify-between items-start"><div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Customer Profile</label><p className="text-[14px] font-black text-slate-800 uppercase italic">{selectedHistoryOrder.customerName}</p></div><div className="text-right">{selectedHistoryOrder.riderName && (<div className="mb-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Logistics</label><p className="text-[12px] font-black text-sky-600 uppercase italic">{selectedHistoryOrder.riderName}</p></div>)}<div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Operator (User ID)</label><p className="text-[12px] font-black text-slate-700 uppercase italic">{selectedHistoryOrder.createdBy}</p></div></div></div><div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Address</label><p className="text-[11px] font-bold text-slate-600 uppercase italic">{selectedHistoryOrder.address}</p></div><div className="flex justify-between"><div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Settlement Method</label><p className="text-[11px] font-black text-emerald-600 uppercase italic">{selectedHistoryOrder.paymentMethod}</p></div></div>{selectedHistoryOrder.remark && (<div className="pt-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Session Remarks</label><p className="text-[11px] font-black text-amber-600 uppercase italic bg-amber-50 p-2 rounded-lg border border-amber-100">{selectedHistoryOrder.remark}</p></div>)}</div><div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden"><table className="w-full text-left font-bold text-gray-900"><thead className="bg-slate-50/50 border-b border-slate-100"><tr className="text-[9px] font-black text-slate-400 uppercase"><th className="px-8 py-4">Asset Detail</th><th className="px-8 py-4 text-right">Value</th></tr></thead><tbody className="divide-y divide-slate-100">{selectedHistoryOrder.items.map((item, idx) => (<tr key={idx}><td className="px-8 py-4"><span className="text-[12px] font-black uppercase italic text-slate-800">{item.productName} (x{item.qty})</span></td><td className="px-8 py-4 text-right text-[12px] font-black italic text-slate-900">₱{formatCurrency(item.total).replace('₱','')}</td></tr>))}</tbody></table></div><div className="space-y-2">{selectedHistoryOrder.totalDiscount > 0 && (<div className="flex justify-between items-center px-8 text-[11px] font-bold text-slate-400 uppercase tracking-widest"><span>Applied Discount</span><span className="text-emerald-500">- ₱{formatCurrency(selectedHistoryOrder.totalDiscount)}</span></div>)}<div className="p-6 bg-slate-950 rounded-[32px] flex justify-between items-center text-white shadow-2xl"><span className="text-[11px] font-black uppercase tracking-widest italic">Settlement Total</span><span className="text-3xl font-black italic">₱{formatCurrency(selectedHistoryOrder.totalAmount)}</span></div></div></div>
                            )}
                         </div>
-                        <div className="p-8 border-t bg-white grid grid-cols-3 gap-3 shrink-0 relative">
+                        <div className="p-8 border-t bg-white grid grid-cols-3 gap-3 shrink-0 relative no-print">
                            <button onClick={handleModifyOrder} disabled={selectedHistoryOrder.status === OrderStatus.CANCELLED} className="py-5 bg-[#2d5da7] text-white rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all disabled:opacity-30">Modify Order</button>
-                           <button onClick={handleReprint} className="py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><i className="fas fa-print"></i> Reprint</button>
+                           <div className="flex flex-col gap-2">
+                              <div className="grid grid-cols-4 gap-1">
+                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setPrintCopyType('CUSTOMER'); setTimeout(() => window.print(), 100); }} className="py-2 bg-white border border-slate-200 rounded-lg text-[8px] font-black">CUST</button>
+                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setPrintCopyType('GATE'); setTimeout(() => window.print(), 100); }} className="py-2 bg-white border border-slate-200 rounded-lg text-[8px] font-black">GATE</button>
+                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setPrintCopyType('STORE'); setTimeout(() => window.print(), 100); }} className="py-2 bg-white border border-slate-200 rounded-lg text-[8px] font-black">STOR</button>
+                                 <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setPrintCopyType('ALL'); setTimeout(() => window.print(), 100); }} className="py-2 bg-slate-900 text-white rounded-lg text-[8px] font-black">ALL</button>
+                              </div>
+                              <button onClick={handleReprint} className="py-3 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><i className="fas fa-print"></i> Quick ALL</button>
+                           </div>
                            {isAdmin && (
                               <button onClick={handleVoidOrder} disabled={selectedHistoryOrder.status === OrderStatus.CANCELLED} className="py-5 bg-white border-2 border-red-100 text-red-500 rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all hover:bg-red-50 disabled:opacity-30 disabled:border-slate-100 disabled:text-slate-300">Void Order</button>
                            )}

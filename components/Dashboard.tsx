@@ -201,44 +201,44 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     const store = stores.find(s => s.id === order.storeId);
     return (
        <div className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
-          <div className="w-48 h-48 mx-auto mb-4">
-             <AceCorpLogo customUrl={logoUrl} />
+          <div className="w-48 h-auto max-h-32 mx-auto mb-0 overflow-hidden flex items-center justify-center">
+             <AceCorpLogo customUrl={logoUrl} className="w-full h-auto" />
           </div>
-          <div className="border border-black px-4 py-1 inline-block mb-4">
+          <div className="border border-black px-4 py-1 inline-block mb-1">
              <h3 className="text-[12px] font-black uppercase tracking-widest">{label}</h3>
           </div>
           <h4 className="text-sm font-black uppercase italic leading-none mb-1 text-black">{store?.name || 'ACECORP'}</h4>
           <p className="text-[10px] uppercase font-bold leading-tight text-black">{store?.address || ''}</p>
           <p className="text-[10px] uppercase font-bold text-black">{store?.mobile || ''}</p>
-          <div className="border-b border-black border-dashed my-4"></div>
+          <div className="border-b border-black border-dashed my-2"></div>
           <div className="text-left font-bold space-y-1 uppercase text-[10px] text-black">
              <div className="flex justify-between"><span>Ref:</span> <span>{order.id.slice(-8)}</span></div>
              <div className="flex justify-between"><span>Date:</span> <span>{new Date(order.createdAt).toLocaleDateString()}</span></div>
              <div className="flex justify-between"><span>Operator:</span> <span>{order.createdBy}</span></div>
              {order.riderName && <div className="flex justify-between"><span>Rider:</span> <span>{order.riderName}</span></div>}
-             <div className="pt-2"><p className="font-black text-[11px] uppercase italic text-black">{order.customerName}</p><p className="text-black">{order.address}</p></div>
+             <div className="pt-1"><p className="font-black text-[11px] uppercase italic text-black">{order.customerName}</p><p className="text-black">{order.address}</p></div>
           </div>
-          <div className="border-b border-black border-dashed my-4"></div>
-          <div className="space-y-2 mb-6">
+          <div className="border-b border-black border-dashed my-2"></div>
+          <div className="space-y-2 mb-4">
              {order.items.map((item, idx) => (
                 <div key={idx}><div className="flex justify-between font-black uppercase italic text-[10px] text-black"><span>{item.productName} (x{item.qty})</span><span>₱{formatCurrency(item.total).replace('₱','')}</span></div></div>
              ))}
           </div>
-          <div className="border-b border-black border-dashed my-4"></div>
+          <div className="border-b border-black border-dashed my-2"></div>
           <div className="flex justify-between font-bold uppercase mb-1 text-[10px] text-black"><span>Method:</span> <span>{order.paymentMethod}</span></div>
           {order.totalDiscount > 0 && (
               <div className="flex justify-between font-bold uppercase mb-1 text-[10px] text-black"><span>Discount:</span> <span>-₱{formatCurrency(order.totalDiscount).replace('₱','')}</span></div>
           )}
           <div className="flex justify-between text-[14px] font-black italic uppercase text-black"><span>TOTAL:</span> <span>₱{formatCurrency(order.totalAmount).replace('₱','')}</span></div>
           
-          <div className="mt-8 pt-4 border-t border-black border-dashed text-center text-black space-y-2">
+          <div className="mt-6 pt-2 border-t border-black border-dashed text-center text-black space-y-2">
               <p className="font-black uppercase text-[10px]">Thank you for choosing AceCorp!</p>
-              <div className="pt-8 pb-4">
+              <div className="pt-6 pb-2">
                   <p className="text-[10px] text-left border-b border-black inline-block w-full text-white">_</p>
                   <p className="text-[9px] text-center font-black uppercase mt-1">CUSTOMER SIGNATURE</p>
               </div>
           </div>
-          <div className="mt-6 pt-4 border-t border-black border-dashed text-center text-black">
+          <div className="mt-4 pt-2 border-t border-black border-dashed text-center text-black">
               <p className="font-bold uppercase text-[9px]">OFFICIAL REGISTRY COPY</p>
               <p className="font-bold uppercase text-[8px] mt-1">System Timestamp: {new Date().toLocaleTimeString()}</p>
           </div>
@@ -246,32 +246,40 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     );
   };
 
-  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    if (type === 'ALL') {
-      const copies: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
-      for (const copy of copies) {
-        setPrintCopyType(copy);
-        await new Promise(resolve => setTimeout(resolve, 250));
-        window.print();
-        await new Promise(resolve => setTimeout(resolve, 250));
-      }
-    } else {
-      setPrintCopyType(type);
-      setTimeout(() => {
-         window.print();
-      }, 150);
-    }
+  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    setPrintCopyType(type);
+    setTimeout(() => {
+       window.print();
+    }, 150);
   };
 
   const COLORS = ['#38bdf8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
   return (
-    <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden font-sans no-print text-gray-900">
+    <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden font-sans text-gray-900">
       <style>{`
         @media print {
-          @page { size: 80mm auto; margin: 0mm; }
+          @page { size: portrait; margin: 10mm; }
           body * { visibility: hidden !important; }
-          #dashboard-thermal-print-root, #dashboard-thermal-print-root * { visibility: visible !important; display: block !important; }
+          
+          /* Full manifest printing */
+          #dashboard-all-orders-print-root, #dashboard-all-orders-print-root * { 
+            visibility: visible !important; 
+            display: block !important; 
+          }
+          #dashboard-all-orders-print-root { 
+            position: absolute !important; 
+            left: 0; top: 0; 
+            width: 100% !important; 
+            background: white !important; 
+            color: black !important; 
+          }
+
+          /* Thermal specific print logic */
+          #dashboard-thermal-print-root, #dashboard-thermal-print-root * { 
+            visibility: visible !important; 
+            display: block !important; 
+          }
           #dashboard-thermal-print-root { 
             position: absolute !important;
             left: 0 !important;
@@ -283,26 +291,69 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             margin: 0 !important;
           }
           .receipt-copy { 
+             display: block !important;
              page-break-after: always !important; 
              break-after: page !important; 
              width: 68mm !important;
              margin: 0 auto !important;
+             overflow: hidden !important;
+             position: relative !important;
           }
+          .no-print { display: none !important; }
         }
       `}</style>
       
-      {/* THERMAL PRINT ROOT (HIDDEN) */}
+      {/* FULL LEDGER PRINT ROOT (80MM OPTIMIZED) */}
+      <div id="dashboard-all-orders-print-root" className="hidden">
+         <div className="p-8 text-center border-b-2 border-black mb-8">
+            <h1 className="text-2xl font-black uppercase italic">{activeStore?.name || 'ACECORP'}</h1>
+            <p className="text-[10px] font-bold uppercase tracking-widest mt-2">Full Order Registry Audit</p>
+            <p className="text-[9px] font-black mt-1">PERIOD: {registryDate} ({reportPeriod.toUpperCase()})</p>
+         </div>
+         <table className="w-full text-left border-collapse">
+            <thead>
+               <tr className="border-b-2 border-black text-[9px] font-black uppercase">
+                  <th className="py-2">Timestamp</th>
+                  <th className="py-2">Ticket #</th>
+                  <th className="py-2">Entity Profile</th>
+                  <th className="py-2">Operator</th>
+                  <th className="py-2 text-center">Status</th>
+                  <th className="py-2 text-right">Settlement</th>
+               </tr>
+            </thead>
+            <tbody className="text-[10px] font-bold uppercase italic">
+               {filteredOrders.map(o => (
+                  <tr key={o.id} className="border-b border-black border-dotted">
+                     <td className="py-3">{toPHDateString(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                     <td className="py-3">#{o.id.slice(-8)}</td>
+                     <td className="py-3">{o.customerName}</td>
+                     <td className="py-3">{o.createdBy}</td>
+                     <td className="py-3 text-center">{o.status}</td>
+                     <td className="py-3 text-right">{formatCurrency(o.totalAmount)}</td>
+                  </tr>
+               ))}
+            </tbody>
+         </table>
+      </div>
+
+      {/* THERMAL RECEIPT PRINT ROOT */}
       <div id="dashboard-thermal-print-root" className="hidden">
          {selectedOrder && (
            <div className="w-[80mm] bg-white">
-              {(printCopyType === 'ALL' || printCopyType === 'CUSTOMER') && generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}
-              {(printCopyType === 'ALL' || printCopyType === 'GATE') && generateReceiptPart(selectedOrder, 'GATE PASS')}
-              {(printCopyType === 'ALL' || printCopyType === 'STORE') && generateReceiptPart(selectedOrder, 'STORE COPY')}
+              {printCopyType === 'ALL' ? (
+                <>
+                   <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}</div>
+                   <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'GATE PASS')}</div>
+                   <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'STORE COPY')}</div>
+                </>
+              ) : (
+                <div className="receipt-copy">{generateReceiptPart(selectedOrder, `${printCopyType} COPY`)}</div>
+              )}
            </div>
          )}
       </div>
 
-      <div className="px-4 sm:px-8 py-5 bg-[#050810] text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 gap-4 sm:gap-0">
+      <div className="px-4 sm:px-8 py-5 bg-[#050810] text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 gap-4 sm:gap-0 no-print">
          <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-12 relative z-10 w-full sm:w-auto">
             <div className="shrink-0">
                <p className="text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1 leading-none">Actual Cash Inflow</p>
@@ -339,7 +390,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
          </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 md:p-8 flex flex-col gap-8">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 md:p-8 flex flex-col gap-8 no-print">
          <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6 shrink-0">
             <div>
                <h1 className="text-2xl sm:text-[28px] font-black italic uppercase tracking-tighter text-slate-900 leading-none">Intelligence Hub</h1>
@@ -355,7 +406,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             </div>
          </div>
 
-         {/* Charts Grid - Balanced 3 Columns */}
+         {/* Charts Grid */}
          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex flex-col h-[380px]">
                <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-6">Settlement Distribution</h3>
@@ -408,10 +459,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             </div>
          </div>
 
-         {/* Ledger Table - With Pagination for Egress Control */}
+         {/* Ledger Table - With Pagination */}
          <div className="bg-white rounded-[32px] sm:rounded-[48px] shadow-sm border border-slate-100 overflow-hidden flex flex-col min-h-[400px]">
             <div className="px-6 sm:px-10 py-4 sm:py-6 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center shrink-0 gap-4">
-               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Registry Manifest Ledger (Page {currentPage})</span>
+               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Registry Manifest Ledger (Page {currentPage} of {totalPages || 1})</span>
+               <button onClick={() => window.print()} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all"><i className="fas fa-print"></i> Print Full Registry</button>
             </div>
             <div className="flex-1 overflow-x-auto custom-scrollbar">
                <table className="w-full text-left min-w-[700px]">
@@ -521,10 +573,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                   {showOrderReceipt ? (
                     <div className="space-y-3">
                       <div className="grid grid-cols-4 gap-2">
-                         <button onClick={() => handlePrintRequest('CUSTOMER')} className="py-3 bg-white border-2 border-slate-200 text-slate-900 rounded-xl font-black uppercase text-[8px] hover:bg-slate-50 transition-all">Cust</button>
-                         <button onClick={() => handlePrintRequest('GATE')} className="py-3 bg-white border-2 border-slate-200 text-slate-900 rounded-xl font-black uppercase text-[8px] hover:bg-slate-50 transition-all">Gate</button>
-                         <button onClick={() => handlePrintRequest('STORE')} className="py-3 bg-white border-2 border-slate-200 text-slate-900 rounded-xl font-black uppercase text-[8px] hover:bg-slate-50 transition-all">Store</button>
-                         <button onClick={() => handlePrintRequest('ALL')} className="py-3 bg-slate-950 text-white rounded-xl font-black uppercase text-[8px] shadow-xl">ALL</button>
+                         <button onClick={() => handlePrintRequest('CUSTOMER')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'CUSTOMER' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Cust</button>
+                         <button onClick={() => handlePrintRequest('GATE')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'GATE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Gate</button>
+                         <button onClick={() => handlePrintRequest('STORE')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'STORE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Store</button>
+                         <button onClick={() => handlePrintRequest('ALL')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'ALL' ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-900 border-slate-200'}`}>ALL</button>
                       </div>
                       <button onClick={() => handlePrintRequest(printCopyType)} className="w-full py-4 bg-sky-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-2"><i className="fas fa-print"></i> Authorize Print</button>
                     </div>
