@@ -36,6 +36,20 @@ const Admin: React.FC<AdminProps> = ({ users, setUsers, stores, setStores, setti
 
   const addLog = (msg: string) => setMigrationLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
+  const formatPhone = (val: string) => {
+    const d = val.replace(/\D/g, '').slice(0, 10);
+    if (d.length <= 2) return d;
+    if (d.length <= 6) return `${d.slice(0, 2)}-${d.slice(2)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
+  };
+
+  const formatMobile = (val: string) => {
+    const d = val.replace(/\D/g, '').slice(0, 11);
+    if (d.length <= 4) return d;
+    if (d.length <= 7) return `${d.slice(0, 4)}-${d.slice(4)}`;
+    return `${d.slice(0, 4)}-${d.slice(4, 7)}-${d.slice(7)}`;
+  };
+
   const handleStartMigration = async () => {
     if (!migrationSource.url || !migrationSource.key) return alert("Source credentials required.");
     if (!confirm("DATA OVERWRITE PROTOCOL: This will pull all records from the old project and merge them here. Proceed?")) return;
@@ -435,10 +449,48 @@ const Admin: React.FC<AdminProps> = ({ users, setUsers, stores, setStores, setti
       {isStoreModalOpen && editingStore && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-[5000] p-6" onClick={() => setIsStoreModalOpen(false)}>
           <div className="bg-white p-12 rounded-[56px] shadow-2xl w-full max-w-lg border-4 border-white animate-in zoom-in duration-300" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-10"><div><h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Node Profile</h3><p className="text-[9px] font-black text-sky-600 uppercase tracking-widest mt-1">Network Definition Protocol</p></div><button onClick={() => setIsStoreModalOpen(false)} className="text-slate-300 hover:text-red-500 transition-colors"><i className="fas fa-times-circle text-3xl"></i></button></div>
+            <div className="flex justify-between items-center mb-10">
+               <div>
+                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Node Profile</h3>
+                  <p className="text-[9px] font-black text-sky-600 uppercase tracking-widest mt-1">Network Definition Protocol</p>
+               </div>
+               <button onClick={() => setIsStoreModalOpen(false)} className="text-slate-300 hover:text-red-500 transition-colors">
+                  <i className="fas fa-times-circle text-3xl"></i>
+               </button>
+            </div>
             <div className="space-y-6">
-              <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Node Descriptor</label><input value={editingStore.name} onChange={e => setEditingStore({...editingStore, name: e.target.value.toUpperCase()})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-black italic outline-none focus:border-sky-500 transition-all shadow-inner uppercase" /></div>
-              <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Node Identifier</label><input maxLength={3} value={editingStore.code} onChange={e => setEditingStore({...editingStore, code: e.target.value.toUpperCase()})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-black italic outline-none focus:border-sky-500 transition-all shadow-inner text-center text-xl uppercase" /></div>
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Node Descriptor (Full Name)</label>
+                <input value={editingStore.name} onChange={e => setEditingStore({...editingStore, name: e.target.value.toUpperCase()})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-black italic outline-none focus:border-sky-500 transition-all shadow-inner uppercase" placeholder="E.G. ACECORP BRANCH 1" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Node Identifier (3-Char Code)</label>
+                <input maxLength={3} value={editingStore.code} onChange={e => setEditingStore({...editingStore, code: e.target.value.toUpperCase()})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-black italic outline-none focus:border-sky-500 transition-all shadow-inner text-center text-xl uppercase" placeholder="E.G. AC1" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Business Address</label>
+                <input value={editingStore.address || ''} onChange={e => setEditingStore({...editingStore, address: e.target.value.toUpperCase()})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-black italic outline-none focus:border-sky-500 transition-all shadow-inner uppercase" placeholder="STREET, CITY, PROVINCE" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Phone (XX-XXXX-XXXX)</label>
+                    <input 
+                      value={editingStore.phone || ''} 
+                      onChange={e => setEditingStore({...editingStore, phone: formatPhone(e.target.value)})} 
+                      className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-black italic outline-none focus:border-sky-500 transition-all shadow-inner" 
+                      placeholder="02-1234-5678" 
+                    />
+                 </div>
+                 <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Mobile (XXXX-XXX-XXXX)</label>
+                    <input 
+                      value={editingStore.mobile || ''} 
+                      onChange={e => setEditingStore({...editingStore, mobile: formatMobile(e.target.value)})} 
+                      className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-black italic outline-none focus:border-sky-500 transition-all shadow-inner" 
+                      placeholder="0917-123-4567" 
+                    />
+                 </div>
+              </div>
               <button onClick={handleSaveStore} className="w-full py-5 bg-sky-600 text-white rounded-[24px] font-black uppercase text-[11px] tracking-[0.2em] shadow-2xl hover:bg-sky-500 transition-all active:scale-95">Authorize Node Link</button>
             </div>
           </div>
