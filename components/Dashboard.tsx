@@ -50,7 +50,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
   const [showOrderReceipt, setShowOrderReceipt] = useState(false);
   const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
   
-  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 15;
 
@@ -61,19 +60,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     const anchor = new Date(registryDate);
     let base = orders.filter(o => String(o.storeId) === String(selectedStoreId));
 
-    if (statusFilter !== 'ALL') {
-      base = base.filter(o => o.status === statusFilter);
-    }
-
-    if (paymentFilter !== 'ALL') {
-      base = base.filter(o => o.paymentMethod === paymentFilter);
-    }
+    if (statusFilter !== 'ALL') base = base.filter(o => o.status === statusFilter);
+    if (paymentFilter !== 'ALL') base = base.filter(o => o.paymentMethod === paymentFilter);
 
     if (reportPeriod === 'daily') {
       base = base.filter(o => toPHDateString(o.createdAt) === registryDate);
-    } 
-    
-    else if (reportPeriod === 'weekly') {
+    } else if (reportPeriod === 'weekly') {
       const start = new Date(anchor);
       start.setDate(anchor.getDate() - anchor.getDay());
       const end = new Date(start);
@@ -82,9 +74,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
         const d = new Date(o.createdAt);
         return d >= start && d <= end;
       });
-    }
-
-    else if (reportPeriod === 'monthly') {
+    } else if (reportPeriod === 'monthly') {
       const year = anchor.getFullYear();
       const month = anchor.getMonth();
       base = base.filter(o => {
@@ -92,7 +82,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
         return d.getFullYear() === year && d.getMonth() === month;
       });
     }
-
     return base.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
   }, [orders, selectedStoreId, registryDate, reportPeriod, statusFilter, paymentFilter]);
 
@@ -138,21 +127,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     const newARGenerated = filteredOrders.filter(o => o.status === OrderStatus.RECEIVABLE).reduce((sum, o) => sum + o.totalAmount, 0);
     const arCollectionsTotal = arCollectionsList.reduce((sum, item) => sum + item.payment.amount, 0);
     
-    const paymentBreakdown: Record<PaymentMethod, number> = {
-      'CASH': 0, 'GCASH': 0, 'MAYA': 0, 'BANK': 0, 'OTHER': 0
-    };
-
+    const paymentBreakdown: Record<PaymentMethod, number> = { 'CASH': 0, 'GCASH': 0, 'MAYA': 0, 'BANK': 0, 'OTHER': 0 };
     revenueOrders.forEach(o => {
       const method = (o.paymentMethod || 'CASH') as PaymentMethod;
       if (paymentBreakdown[method] !== undefined) paymentBreakdown[method] += o.totalAmount;
-      else paymentBreakdown['OTHER'] += o.totalAmount;
     });
-
     arCollectionsList.forEach(item => {
         const method = (item.payment.paymentMethod || 'CASH') as PaymentMethod;
         if (paymentBreakdown[method] !== undefined) paymentBreakdown[method] += item.payment.amount;
     });
-
     return { totalSales, orderCount, paymentBreakdown, newARGenerated, arCollectionsTotal };
   }, [filteredOrders, arCollectionsList]);
 
@@ -175,24 +158,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           .reduce((sum, o) => sum + o.totalAmount, 0)
       }));
     }
-
     const pieData = Object.entries(stats.paymentBreakdown)
       .filter(([_, value]) => (value as number) > 0)
       .map(([name, value]) => ({ name, value: value as number }));
-
     const storeStocks = stocks
       .filter(s => String(s.storeId) === String(selectedStoreId))
       .map(s => {
         const matchedProduct = products.find(p => String(p.id) === String(s.productId));
-        const productName = matchedProduct ? matchedProduct.name : 'SKU';
-        return {
-          name: productName.split(',')[0],
-          qty: Number(s.quantity)
-        };
+        return { name: (matchedProduct ? matchedProduct.name : 'SKU').split(',')[0], qty: Number(s.quantity) };
       })
-      .sort((a, b) => b.qty - a.qty)
-      .slice(0, 8);
-
+      .sort((a, b) => b.qty - a.qty).slice(0, 8);
     return { velocityData, pieData, storeStocks };
   }, [filteredOrders, reportPeriod, stats.paymentBreakdown, stocks, selectedStoreId, products]);
 
@@ -200,12 +175,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     const store = stores.find(s => s.id === order.storeId);
     return (
        <div className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
-          <div className="w-48 h-auto max-h-32 mx-auto mb-0 overflow-hidden flex items-center justify-center">
-             <AceCorpLogo customUrl={logoUrl} className="w-full h-auto" />
-          </div>
-          <div className="border border-black px-4 py-1 inline-block mb-1">
-             <h3 className="text-[12px] font-black uppercase tracking-widest">{label}</h3>
-          </div>
+          <div className="w-48 h-auto max-h-32 mx-auto mb-0 overflow-hidden flex items-center justify-center"><AceCorpLogo customUrl={logoUrl} className="w-full h-auto" /></div>
+          <div className="border border-black px-4 py-1 inline-block mb-1"><h3 className="text-[12px] font-black uppercase tracking-widest">{label}</h3></div>
           <h4 className="text-sm font-black uppercase italic leading-none mb-1 text-black">{store?.name || 'ACECORP'}</h4>
           <p className="text-[10px] uppercase font-bold leading-tight text-black">{store?.address || ''}</p>
           <p className="text-[10px] uppercase font-bold text-black">{store?.mobile || ''}</p>
@@ -247,9 +218,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
       setPrintCopyType('ALL');
     } else {
       setPrintCopyType(type);
-      setTimeout(() => {
-         window.print();
-      }, 150);
+      setTimeout(() => { window.print(); }, 150);
     }
   };
 
@@ -259,75 +228,19 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden font-sans text-slate-900">
       <style>{`
         @media print {
-          /* Page Dimensions */
           @page { size: portrait; margin: 15mm; }
-          
-          /* Neutralize fixed layouts and overflows */
-          html, body { 
-            height: auto !important; 
-            overflow: visible !important; 
-            background: white !important;
-            color: black !important;
-            font-family: 'Inter', sans-serif;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-
-          /* Force all parent containers to expand for printing */
-          #root, main, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar {
-            height: auto !important;
-            overflow: visible !important;
-            display: block !important;
-            min-height: 0 !important;
-            position: static !important;
-          }
-
-          /* Hide interface chrome */
-          .no-print, header, aside, .pagination-controls, button { 
-            display: none !important; 
-          }
-
-          /* Dashboard Manifest Print Optimization */
-          #dashboard-all-orders-print-root {
-            display: block !important;
-            visibility: visible !important;
-            width: 100% !important;
-            position: relative !important;
-            top: 0 !important;
-            left: 0 !important;
-            padding: 0 !important;
-          }
-
-          #dashboard-all-orders-print-root table {
-            width: 100% !important;
-            border-collapse: collapse !important;
-            table-layout: auto !important;
-            display: table !important;
-          }
-
-          /* Repeat headers on every printed page */
-          #dashboard-all-orders-print-root thead {
-            display: table-header-group !important;
-          }
-
-          #dashboard-all-orders-print-root tr {
-            page-break-inside: avoid !important;
-            display: table-row !important;
-          }
-
-          #dashboard-all-orders-print-root td, #dashboard-all-orders-print-root th {
-            border-bottom: 1px solid #ddd !important;
-            padding: 8px !important;
-          }
-
-          /* Reprint Thermal (Only if specific thermal is active) */
-          #dashboard-thermal-print-root {
-            display: none !important;
-          }
+          html, body { height: auto !important; overflow: visible !important; background: white !important; color: black !important; font-family: 'Inter', sans-serif; margin: 0 !important; padding: 0 !important; }
+          #root, main, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar { height: auto !important; overflow: visible !important; display: block !important; min-height: 0 !important; position: static !important; }
+          .no-print, header, aside, .pagination-controls, button { display: none !important; }
+          #dashboard-all-orders-print-root { display: block !important; visibility: visible !important; width: 100% !important; position: relative !important; top: 0 !important; left: 0 !important; padding: 0 !important; }
+          #dashboard-all-orders-print-root table { width: 100% !important; border-collapse: collapse !important; table-layout: auto !important; display: table !important; }
+          #dashboard-all-orders-print-root thead { display: table-header-group !important; }
+          #dashboard-all-orders-print-root tr { page-break-inside: avoid !important; display: table-row !important; }
+          #dashboard-all-orders-print-root td, #dashboard-all-orders-print-root th { border-bottom: 1px solid #ddd !important; padding: 8px !important; }
+          #dashboard-thermal-print-root { display: none !important; }
         }
       `}</style>
       
-      {/* PROFESSIONAL DASHBOARD FULL MANIFEST PRINT (Multi-page optimized) */}
       <div id="dashboard-all-orders-print-root" className="hidden">
          <div className="text-center mb-10 border-b-4 border-slate-900 pb-6">
             <h1 className="text-3xl font-black uppercase italic tracking-tighter">{activeStore?.name || 'ACECORP'}</h1>
@@ -370,37 +283,34 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
          </div>
       </div>
 
-      <div id="dashboard-thermal-print-root" className="hidden">
-         {selectedOrder && (
-           <div className="w-[80mm] bg-white">
-              <div className="receipt-copy">
-                {generateReceiptPart(selectedOrder, `${printCopyType === 'ALL' ? 'CUSTOMER' : printCopyType} COPY`)}
-              </div>
-           </div>
-         )}
-      </div>
-
-      {/* INTELLIGENCE HUB SUMMARY BAR */}
-      <div className="px-8 py-6 bg-slate-950 text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 gap-4 sm:gap-0 no-print">
+      {/* INTELLIGENCE HUB SUMMARY (SCREENSHOT ACCURATE) */}
+      <div className="px-8 py-6 bg-slate-800 text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 gap-4 sm:gap-0 no-print">
          <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-12 relative z-10 w-full sm:w-auto">
-            <div className="shrink-0 border-l-4 border-sky-500 pl-6">
-               <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1 leading-none">Net Actual Cash Inflow</p>
-               <h2 className="text-xl sm:text-3xl font-black italic tracking-tighter text-white leading-none">{formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</h2>
+            <div className="shrink-0 border-l-[6px] border-sky-500 pl-8">
+               <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1 leading-none">Net Actual Cash Inflow</p>
+               <h2 className="text-[32px] font-black italic tracking-tighter text-white leading-none">
+                 {formatCurrency(stats.totalSales + stats.arCollectionsTotal)}
+               </h2>
             </div>
-            <div className="flex flex-wrap gap-8 overflow-x-auto pb-1 no-scrollbar items-center">
+            <div className="flex flex-wrap gap-8 items-center border-l border-white/10 pl-10">
                <div className="shrink-0">
-                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none">Booked Revenue</p>
-                  <p className="text-xs sm:text-lg font-black italic text-white leading-none">{formatCurrency(stats.totalSales + stats.newARGenerated)}</p>
+                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none">Total Booked Revenue</p>
+                  <p className="text-xl font-black italic tracking-tight text-slate-300 leading-none">{formatCurrency(stats.totalSales + stats.newARGenerated)}</p>
+               </div>
+               <div className="shrink-0">
+                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none">New AR Generated</p>
+                  <p className="text-xl font-black italic tracking-tight text-orange-400 leading-none">{formatCurrency(stats.newARGenerated)}</p>
                </div>
                <div className="shrink-0">
                   <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none">AR Collections</p>
-                  <p className="text-xs sm:text-lg font-black italic tracking-tight text-[#10b981] leading-none">{formatCurrency(stats.arCollectionsTotal)}</p>
+                  <p className="text-xl font-black italic tracking-tight text-[#10b981] leading-none">{formatCurrency(stats.arCollectionsTotal)}</p>
                </div>
-               <div className="hidden lg:flex gap-6 border-l border-white/10 pl-6">
-                  {Object.entries(stats.paymentBreakdown).filter(([_,v]) => v > 0).map(([method, amount]) => (
+               <div className="h-10 w-px bg-white/10 mx-2 hidden xl:block"></div>
+               <div className="flex gap-8">
+                  {Object.entries(stats.paymentBreakdown).filter(([k,v]) => ['CASH', 'GCASH', 'MAYA'].includes(k)).map(([method, amount]) => (
                     <div key={method} className="shrink-0">
-                       <p className="text-[7px] font-black text-slate-600 uppercase mb-1 leading-none">{method}</p>
-                       <p className="text-xs font-black italic text-slate-300 leading-none">{formatCurrency(amount as number)}</p>
+                       <p className="text-[7px] font-black text-slate-500 uppercase mb-1 leading-none">{method}</p>
+                       <p className="text-lg font-black italic text-slate-400 leading-none">{formatCurrency(amount as number)}</p>
                     </div>
                   ))}
                </div>
@@ -408,8 +318,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
          </div>
          <div className="relative z-10 text-right shrink-0 ml-auto sm:ml-0 flex flex-col items-end">
             <p className="text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Manifest</p>
-            <div className="bg-slate-800/80 px-4 py-1.5 rounded-full border border-white/5">
-                <p className="text-lg sm:text-2xl font-black italic text-white leading-none">{stats.orderCount}</p>
+            <div className="bg-slate-400 w-12 h-12 rounded-full flex items-center justify-center shadow-inner border border-white/10">
+                <p className="text-2xl font-black italic text-slate-900 leading-none">{stats.orderCount}</p>
             </div>
          </div>
       </div>
@@ -424,7 +334,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                <CustomDatePicker value={registryDate} onChange={setRegistryDate} className="w-full sm:w-48" />
                <div className="flex p-1 bg-slate-50 rounded-xl">
                   {(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (
-                  <button key={p} onClick={() => setReportPeriod(p)} className={`flex-1 sm:px-4 py-2 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest transition-all ${reportPeriod === p ? 'bg-slate-900 text-white shadow-md' : 'text-slate-400'}`}>{p}</button>
+                  <button key={p} onClick={() => setReportPeriod(p)} className={`flex-1 sm:px-4 py-2 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest transition-all ${reportPeriod === p ? 'bg-slate-400 text-white shadow-md' : 'text-slate-400'}`}>{p}</button>
                   ))}
                </div>
             </div>
@@ -485,19 +395,37 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
          {/* PROFESSIONAL REGISTRY MANIFEST TABLE */}
          <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 overflow-hidden flex flex-col min-h-[500px]">
             <div className="px-10 py-8 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center shrink-0 gap-6">
-               <div className="flex items-center gap-4">
+               <div className="flex items-center gap-6">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registry Manifest Ledger</span>
-                  <div className="h-4 w-px bg-slate-200"></div>
-                  <span className="text-[10px] font-black text-sky-600 uppercase tracking-widest">Turn {currentPage} of {totalPages}</span>
+                  {/* FUNCTIONAL PAGINATION PILL FROM SCREENSHOT */}
+                  <div className="flex items-center bg-sky-50 border-2 border-sky-200 rounded-full px-4 py-1.5 shadow-sm">
+                     <button 
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        className="text-sky-600 hover:text-sky-800 disabled:opacity-30 p-1"
+                     >
+                        <i className="fas fa-chevron-left text-[10px]"></i>
+                     </button>
+                     <span className="mx-4 text-[10px] font-black text-sky-600 uppercase tracking-widest">
+                        TURN {currentPage} OF {totalPages}
+                     </span>
+                     <button 
+                        disabled={currentPage >= totalPages}
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        className="text-sky-600 hover:text-sky-800 disabled:opacity-30 p-1"
+                     >
+                        <i className="fas fa-chevron-right text-[10px]"></i>
+                     </button>
+                  </div>
                </div>
                <button onClick={() => window.print()} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center gap-2 hover:bg-slate-800 transition-all active:scale-95"><i className="fas fa-print"></i> Generate Full Registry</button>
             </div>
             <div className="flex-1 overflow-x-auto custom-scrollbar">
                <table className="w-full text-left min-w-[1000px]">
-                  <thead className="bg-slate-50 text-[10px] text-slate-400 font-black uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 shadow-sm">
+                  <thead className="bg-slate-50 text-[10px] text-slate-300 font-black uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 shadow-sm">
                     <tr>
                       <th className="px-10 py-6">Timestamp</th>
-                      <th className="px-4 py-6 text-sky-600">Ticket #</th>
+                      <th className="px-4 py-6 text-sky-400">Ticket #</th>
                       <th className="px-10 py-6">Personnel / Reference</th>
                       <th className="px-6 py-6">Operator (Op)</th>
                       <th className="px-6 py-6 text-center">Status</th>
@@ -511,48 +439,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                       paginatedOrders.map(o => (
                         <tr key={o.id} onClick={() => { setSelectedOrder(o); setShowOrderReceipt(false); setPrintCopyType('ALL'); }} className="hover:bg-sky-50/50 cursor-pointer transition-colors group">
                            <td className="px-10 py-6">
-                              <span className="text-[11px] font-bold text-slate-900 leading-none">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                              <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase">{toPHDateString(o.createdAt)}</p>
+                              <span className="text-[11px] font-bold text-slate-400 leading-none">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                            </td>
-                           <td className="px-4 py-6"><span className="font-mono font-black text-[10px] text-sky-600 bg-sky-50 px-2 py-1 rounded-md">#{o.id.slice(-8)}</span></td>
-                           <td className="px-10 py-6"><p className="text-[12px] font-black uppercase italic text-slate-900 leading-none truncate max-w-[200px]">{o.customerName}</p></td>
-                           <td className="px-6 py-6"><p className="text-[11px] font-black uppercase italic text-sky-600">{o.createdBy || 'SYSTEM'}</p></td>
+                           <td className="px-4 py-6"><span className="font-mono font-black text-[10px] text-sky-400 bg-sky-50 px-2 py-1 rounded-md">#{o.id.slice(-8)}</span></td>
+                           <td className="px-10 py-6"><p className="text-[12px] font-black uppercase italic text-slate-500 leading-none truncate max-w-[200px]">{o.customerName}</p></td>
+                           <td className="px-6 py-6"><p className="text-[11px] font-black uppercase italic text-sky-400">{o.createdBy || 'SYSTEM'}</p></td>
                            <td className="px-6 py-5 text-center">
-                                 <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : o.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-400'}`}>{o.status}</span>
+                                 <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-400 border-emerald-100' : o.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-400 border-orange-100' : 'bg-slate-50 text-slate-300 border-slate-100'}`}>{o.status}</span>
                            </td>
-                           <td className="px-10 py-6 text-right font-black italic text-slate-950 text-base">{formatCurrency(o.totalAmount)}</td>
+                           <td className="px-10 py-6 text-right font-black italic text-slate-400 text-base">{formatCurrency(o.totalAmount)}</td>
                         </tr>
                       ))
                     )}
                   </tbody>
                </table>
             </div>
-
-            {totalPages > 1 && (
-              <div className="px-10 py-8 border-t border-slate-50 flex items-center justify-between shrink-0 bg-white pagination-controls">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Registry turn {currentPage} of {totalPages}</p>
-                <div className="flex gap-4">
-                  <button 
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    className="px-8 py-3 bg-white text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 hover:bg-sky-50 transition-all disabled:opacity-20 active:scale-95"
-                  >
-                    Previous Turn
-                  </button>
-                  <button 
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    className="px-8 py-3 bg-slate-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-all disabled:opacity-20 active:scale-95"
-                  >
-                    Next Turn
-                  </button>
-                </div>
-              </div>
-            )}
          </div>
       </div>
-
-      {/* DETAILED OVERLAY */}
       {selectedOrder && (
          <div className="fixed inset-0 z-[4000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300 no-print" onClick={() => setSelectedOrder(null)}>
             <div className="bg-white w-full max-w-[500px] rounded-[56px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
@@ -578,7 +481,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                            </div>
                            <div className="pt-4 border-t border-slate-50 flex justify-between items-center">
                               <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Settlement Method</label><p className="text-[13px] font-black text-emerald-600 uppercase italic">{selectedOrder.paymentMethod}</p></div>
-                              <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase border ${selectedOrder.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : selectedOrder.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-400'}`}>{selectedOrder.status}</span>
+                              <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase border ${selectedOrder.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-400 border-emerald-100' : selectedOrder.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-400'}`}>{selectedOrder.status}</span>
                            </div>
                         </div>
                         <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden font-bold">

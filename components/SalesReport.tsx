@@ -52,15 +52,13 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 25;
 
-  const hasGlobalAccess = user.assignedStoreIds.includes('all');
-
   useEffect(() => {
     setSearchQuery('');
   }, []);
 
   const filteredOrders = useMemo(() => {
     const anchor = new Date(date);
-    let base = orders.filter(o => hasGlobalAccess || o.storeId === user.selectedStoreId);
+    let base = orders.filter(o => String(o.storeId) === String(user.selectedStoreId));
 
     if (statusFilter !== 'ALL') base = base.filter(o => o.status === statusFilter);
     if (paymentFilter !== 'ALL') base = base.filter(o => o.paymentMethod === paymentFilter);
@@ -96,12 +94,15 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     }
 
     return base.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
-  }, [orders, user.selectedStoreId, date, reportPeriod, statusFilter, paymentFilter, hasGlobalAccess, searchQuery]);
+  }, [orders, user.selectedStoreId, date, reportPeriod, statusFilter, paymentFilter, searchQuery]);
 
   const arCollectionRegistry = useMemo(() => {
     const anchor = new Date(date);
     const payments = receivablePayments.filter(rp => {
-        const matchesNode = hasGlobalAccess || orders.find(o => o.id === (receivables.find(r => r.id === rp.receivableId)?.orderId))?.storeId === user.selectedStoreId;
+        const ar = receivables.find(r => r.id === rp.receivableId);
+        const order = orders.find(o => o.id === ar?.orderId);
+        const matchesNode = order && String(order.storeId) === String(user.selectedStoreId);
+        
         if (!matchesNode) return false;
         const pDate = toPHDateString(rp.paidAt);
         if (reportPeriod === 'daily') return pDate === date;
@@ -122,7 +123,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
         const order = orders.find(o => o.id === ar?.orderId);
         return { payment: rp, order, ar };
     }).filter(item => !!item.order).sort((a,b) => b.payment.paidAt.localeCompare(a.payment.paidAt));
-  }, [receivablePayments, receivables, orders, date, reportPeriod, hasGlobalAccess, user.selectedStoreId]);
+  }, [receivablePayments, receivables, orders, date, reportPeriod, user.selectedStoreId]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -149,9 +150,19 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     const totalSales = revenueOrders.reduce((sum, o) => sum + o.totalAmount, 0);
     const newARGenerated = filteredOrders.filter(o => o.status === OrderStatus.RECEIVABLE).reduce((sum, o) => sum + o.totalAmount, 0);
     const arCollectionsTotal = arCollectionRegistry.reduce((sum, item) => sum + item.payment.amount, 0);
+    
     const paymentBreakdown: Record<PaymentMethod, number> = { 'CASH': 0, 'GCASH': 0, 'MAYA': 0, 'BANK': 0, 'OTHER': 0 };
-    revenueOrders.forEach(o => { const m = o.paymentMethod as PaymentMethod; if (paymentBreakdown[m] !== undefined) paymentBreakdown[m] += o.totalAmount; });
-    arCollectionRegistry.forEach(item => { const m = item.payment.paymentMethod as PaymentMethod; if (paymentBreakdown[m] !== undefined) paymentBreakdown[m] += item.payment.amount; });
+    
+    revenueOrders.forEach(o => { 
+      const m = o.paymentMethod as PaymentMethod; 
+      if (paymentBreakdown[m] !== undefined) paymentBreakdown[m] += o.totalAmount; 
+    });
+    
+    arCollectionRegistry.forEach(item => { 
+      const m = item.payment.paymentMethod as PaymentMethod; 
+      if (paymentBreakdown[m] !== undefined) paymentBreakdown[m] += item.payment.amount; 
+    });
+
     return { totalSales, newARGenerated, arCollectionsTotal, paymentBreakdown };
   }, [filteredOrders, arCollectionRegistry]);
 
@@ -208,81 +219,25 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
 
   const formatCurrency = (val: number) => `₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const activeStore = stores.find(s => s.id === user.selectedStoreId);
-  const headerName = hasGlobalAccess ? 'ACECORP ENTERPRISE' : (activeStore?.name?.toUpperCase() || 'ACECORP BRANCH');
+  const headerName = activeStore?.name?.toUpperCase() || 'ACECORP BRANCH';
 
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden text-slate-900 font-sans">
       <style>{`
         @media print {
-          /* Force page dimensions and margins */
           @page { size: portrait; margin: 15mm; }
-          
-          /* Neutralize application overflow constraints */
-          html, body { 
-            height: auto !important; 
-            overflow: visible !important; 
-            background: white !important;
-            color: black !important;
-            font-family: 'Inter', sans-serif;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-
-          /* Force all containers to expand vertically */
-          #root, main, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar {
-            height: auto !important;
-            overflow: visible !important;
-            display: block !important;
-            min-height: 0 !important;
-            position: static !important;
-          }
-
-          /* Hide interface chrome */
-          .no-print, header, aside, .pagination-controls, button { 
-            display: none !important; 
-          }
-
-          /* Optimize table for multi-page document */
-          #audit-manifest-report-root {
-            display: block !important;
-            visibility: visible !important;
-            width: 100% !important;
-            position: relative !important;
-            top: 0 !important;
-            left: 0 !important;
-            padding: 0 !important;
-          }
-
-          #audit-manifest-report-root table {
-            width: 100% !important;
-            border-collapse: collapse !important;
-            table-layout: auto !important;
-            display: table !important;
-          }
-
-          /* Repeat headers on every page */
-          #audit-manifest-report-root thead {
-            display: table-header-group !important;
-          }
-
-          #audit-manifest-report-root tr {
-            page-break-inside: avoid !important;
-            display: table-row !important;
-          }
-
-          #audit-manifest-report-root td, #audit-manifest-report-root th {
-            border-bottom: 1px solid #ddd !important;
-            padding: 8px !important;
-          }
-          
-          /* Thermal Reprint Logic */
-          #audit-thermal-print-root {
-            display: none !important;
-          }
+          html, body { height: auto !important; overflow: visible !important; background: white !important; color: black !important; font-family: 'Inter', sans-serif; margin: 0 !important; padding: 0 !important; }
+          #root, main, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar { height: auto !important; overflow: visible !important; display: block !important; min-height: 0 !important; position: static !important; }
+          .no-print, header, aside, .pagination-controls, button { display: none !important; }
+          #audit-manifest-report-root { display: block !important; visibility: visible !important; width: 100% !important; position: relative !important; top: 0 !important; left: 0 !important; padding: 0 !important; }
+          #audit-manifest-report-root table { width: 100% !important; border-collapse: collapse !important; table-layout: auto !important; display: table !important; }
+          #audit-manifest-report-root thead { display: table-header-group !important; }
+          #audit-manifest-report-root tr { page-break-inside: avoid !important; display: table-row !important; }
+          #audit-manifest-report-root td, #audit-manifest-report-root th { border-bottom: 1px solid #ddd !important; padding: 8px !important; }
+          #audit-thermal-print-root { display: none !important; }
         }
       `}</style>
       
-      {/* PROFESSIONAL FULL MANIFEST PRINT (Multi-page optimized) */}
       <div id="audit-manifest-report-root" className="hidden">
          <div className="text-center mb-10 border-b-4 border-slate-900 pb-6">
             <h1 className="text-3xl font-black uppercase italic tracking-tighter">{headerName}</h1>
@@ -292,7 +247,6 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                <p>Auth Operator: {user.username}</p>
             </div>
          </div>
-
          {auditMode === 'SALES' ? (
            <table className="w-full text-left">
               <thead>
@@ -344,7 +298,6 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
               </tbody>
            </table>
          )}
-
          <div className="mt-12 pt-6 border-t-2 border-slate-300 flex justify-between items-baseline">
             <div className="text-[11px] font-black uppercase">
                <p className="text-slate-500 mb-1">AGGREGATE AUDIT FOOTER</p>
@@ -354,34 +307,41 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
          </div>
       </div>
 
-      {/* INTELLIGENCE HUB SUMMARY */}
-      <div className="px-8 py-6 bg-slate-950 text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 no-print">
+      {/* INTELLIGENCE HUB SUMMARY (SCREENSHOT ACCURATE) */}
+      <div className="px-8 py-6 bg-slate-800 text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 no-print">
          <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-12 relative z-10 w-full sm:w-auto">
-            <div className="shrink-0 border-l-4 border-sky-500 pl-6">
-               <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1 leading-none">Net Actual Cash Inflow</p>
-               <h2 className="text-3xl font-black italic tracking-tighter text-white leading-none">{formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</h2>
+            <div className="shrink-0 border-l-[6px] border-sky-500 pl-8">
+               <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1 leading-none">Net Actual Cash Inflow</p>
+               <h2 className="text-[32px] font-black italic tracking-tighter text-white leading-none">
+                 {formatCurrency(stats.totalSales + stats.arCollectionsTotal)}
+               </h2>
             </div>
-            <div className="flex flex-wrap gap-8 overflow-x-auto no-scrollbar items-center">
+            <div className="flex flex-wrap gap-8 items-center border-l border-white/10 pl-10">
                <div className="shrink-0">
                   <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none">Total Booked Revenue</p>
-                  <p className="text-lg font-black italic tracking-tight text-white leading-none">{formatCurrency(stats.totalSales + stats.newARGenerated)}</p>
+                  <p className="text-xl font-black italic tracking-tight text-slate-300 leading-none">{formatCurrency(stats.totalSales + stats.newARGenerated)}</p>
+               </div>
+               <div className="shrink-0">
+                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none">New AR Generated</p>
+                  <p className="text-xl font-black italic tracking-tight text-orange-400 leading-none">{formatCurrency(stats.newARGenerated)}</p>
                </div>
                <div className="shrink-0">
                   <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none">AR Collections</p>
-                  <p className="text-lg font-black italic tracking-tight text-emerald-400 leading-none">{formatCurrency(stats.arCollectionsTotal)}</p>
+                  <p className="text-xl font-black italic tracking-tight text-[#10b981] leading-none">{formatCurrency(stats.arCollectionsTotal)}</p>
                </div>
-               <div className="hidden lg:flex gap-6 border-l border-white/10 pl-6">
-                  {Object.entries(stats.paymentBreakdown).filter(([_,v]) => v > 0).slice(0, 3).map(([method, amount]) => (
+               <div className="h-10 w-px bg-white/10 mx-2 hidden xl:block"></div>
+               <div className="flex gap-8">
+                  {Object.entries(stats.paymentBreakdown).filter(([k,v]) => ['CASH', 'GCASH', 'MAYA'].includes(k)).map(([method, amount]) => (
                     <div key={method} className="shrink-0">
-                       <p className="text-[7px] font-black text-slate-600 uppercase mb-1 leading-none">{method}</p>
-                       <p className="text-xs font-black italic text-slate-300 leading-none">{formatCurrency(amount as number)}</p>
+                       <p className="text-[7px] font-black text-slate-500 uppercase mb-1 leading-none">{method}</p>
+                       <p className="text-lg font-black italic text-slate-400 leading-none">{formatCurrency(amount as number)}</p>
                     </div>
                   ))}
                </div>
             </div>
          </div>
          <div className="no-print">
-            <button onClick={() => window.print()} className="px-6 py-3 bg-white text-slate-950 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center gap-2 hover:bg-sky-50 transition-all active:scale-95"><i className="fas fa-print"></i> Full Audit Report</button>
+            <button onClick={() => window.print()} className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black uppercase text-[9px] tracking-widest shadow-xl flex items-center gap-2 transition-all active:scale-95 border border-white/10"><i className="fas fa-print"></i> Full Audit Report</button>
          </div>
       </div>
 
@@ -392,28 +352,24 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   <h1 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">{headerName}</h1>
                   <p className="text-[9px] font-bold text-sky-600 uppercase tracking-[0.2em] mt-2">Internal Audit Protocol</p>
                </div>
-               
                <div className="space-y-10">
                   <div className="space-y-4">
                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Audit Target</label>
                      <div className="grid grid-cols-1 gap-2 p-1.5 bg-slate-50 rounded-[24px] border border-slate-100">
-                        <button onClick={() => setAuditMode('SALES')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'SALES' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>Sales Registry</button>
-                        <button onClick={() => setAuditMode('AR_COLLECTION')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'AR_COLLECTION' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>AR Collections</button>
+                        <button onClick={() => setAuditMode('SALES')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'SALES' ? 'bg-slate-400 text-white shadow-lg italic' : 'text-slate-400 hover:text-slate-600'}`}>Sales Registry</button>
+                        <button onClick={() => setAuditMode('AR_COLLECTION')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'AR_COLLECTION' ? 'bg-slate-400 text-white shadow-lg italic' : 'text-slate-400 hover:text-slate-600'}`}>AR Collections</button>
                      </div>
                   </div>
-
                   <div className="space-y-4"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Reference Date</label><CustomDatePicker value={date} onChange={setDate} className="w-full shadow-sm" /></div>
-                  
                   <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 space-y-6">
                      <div className="space-y-2">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Time Scope</label>
                         <div className="flex gap-1 p-1 bg-white rounded-xl shadow-sm">
                            {(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (
-                             <button key={p} onClick={() => setReportPeriod(p)} className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${reportPeriod === p ? 'bg-sky-600 text-white shadow-md' : 'text-slate-400'}`}>{p}</button>
+                             <button key={p} onClick={() => setReportPeriod(p)} className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${reportPeriod === p ? 'bg-slate-400 text-white shadow-md' : 'text-slate-400'}`}>{p}</button>
                            ))}
                         </div>
                      </div>
-                     
                      {auditMode === 'SALES' && (
                         <>
                            <div className="space-y-2">
@@ -423,17 +379,6 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                                  <option value={OrderStatus.ORDERED}>Ordered</option>
                                  <option value={OrderStatus.RECEIVABLE}>Receivable</option>
                                  <option value={OrderStatus.CANCELLED}>Cancelled</option>
-                              </select>
-                           </div>
-                           <div className="space-y-2">
-                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Payment Method</label>
-                              <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value as any)} className="w-full bg-white border border-slate-100 p-2.5 rounded-xl text-[10px] font-black uppercase italic outline-none">
-                                 <option value="ALL">All Methods</option>
-                                 <option value="CASH">Cash</option>
-                                 <option value="GCASH">GCash</option>
-                                 <option value="MAYA">Maya</option>
-                                 <option value="BANK">Bank</option>
-                                 <option value="OTHER">Other</option>
                               </select>
                            </div>
                         </>
@@ -454,14 +399,37 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-10 bg-slate-50/20">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-10 bg-slate-50/10">
                <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 overflow-hidden flex flex-col h-full min-w-[1000px]">
                   <div className="flex-1 overflow-y-auto custom-scrollbar">
+                     <div className="px-10 py-6 border-b border-slate-50 flex items-center gap-6 bg-white sticky top-0 z-20">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registry Audit Manifest</span>
+                        {/* FUNCTIONAL PAGINATION PILL FROM SCREENSHOT */}
+                        <div className="flex items-center bg-sky-50 border-2 border-sky-200 rounded-full px-4 py-1.5 shadow-sm">
+                           <button 
+                              disabled={currentPage === 1}
+                              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                              className="text-sky-600 hover:text-sky-800 disabled:opacity-30 p-1"
+                           >
+                              <i className="fas fa-chevron-left text-[10px]"></i>
+                           </button>
+                           <span className="mx-4 text-[10px] font-black text-sky-600 uppercase tracking-widest">
+                              TURN {currentPage} OF {currentTotalPages}
+                           </span>
+                           <button 
+                              disabled={currentPage >= currentTotalPages}
+                              onClick={() => setCurrentPage(p => Math.min(currentTotalPages, p + 1))}
+                              className="text-sky-600 hover:text-sky-800 disabled:opacity-30 p-1"
+                           >
+                              <i className="fas fa-chevron-right text-[10px]"></i>
+                           </button>
+                        </div>
+                     </div>
                      <table className="w-full text-left">
-                        <thead className="bg-slate-50 text-[10px] text-slate-400 font-black uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 shadow-sm">
+                        <thead className="bg-slate-50 text-[10px] text-slate-300 font-black uppercase tracking-widest border-b border-slate-100 sticky top-[57px] z-10 shadow-sm">
                            <tr>
                               <th className="px-10 py-6">Timestamp</th>
-                              <th className="px-4 py-6 text-sky-600">Ticket #</th>
+                              <th className="px-4 py-6 text-sky-400">Ticket #</th>
                               <th className="px-10 py-6">Customer / Entity Profile</th>
                               <th className="px-4 py-6">Method</th>
                               <th className="px-6 py-6">Op</th>
@@ -474,49 +442,36 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                              paginatedOrders.map(o => (
                                 <tr key={o.id} onClick={() => { setSelectedOrder(o); setShowOrderReceipt(false); setPrintCopyType('ALL'); }} className="hover:bg-sky-50/50 transition-colors cursor-pointer group">
                                    <td className="px-10 py-6 font-mono text-[10px]">
-                                      <div className="font-bold text-slate-900">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-                                      <div className="text-[8px] opacity-40 uppercase">{toPHDateString(o.createdAt)}</div>
+                                      <div className="font-bold text-slate-400">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
                                    </td>
-                                   <td className="px-4 py-6"><span className="font-mono font-black text-[10px] text-sky-600">#{o.id.slice(-8)}</span></td>
-                                   <td className="px-10 py-6"><p className="text-[12px] font-black uppercase italic text-slate-900 leading-none">{o.customerName}</p></td>
-                                   <td className="px-4 py-6"><span className="text-[9px] font-bold text-slate-500 uppercase">{o.paymentMethod}</span></td>
-                                   <td className="px-6 py-6"><p className="text-[11px] font-black text-sky-600 uppercase italic leading-none">{o.createdBy}</p></td>
-                                   <td className="px-6 py-6 text-center"><span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : o.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>{o.status}</span></td>
-                                   <td className="px-10 py-6 text-right"><span className="text-[16px] font-black italic text-slate-950">{formatCurrency(o.totalAmount)}</span></td>
+                                   <td className="px-4 py-6"><span className="font-mono font-black text-[10px] text-sky-400">#{o.id.slice(-8)}</span></td>
+                                   <td className="px-10 py-6"><p className="text-[12px] font-black uppercase italic text-slate-500 leading-none">{o.customerName}</p></td>
+                                   <td className="px-4 py-6"><span className="text-[9px] font-bold text-slate-400 uppercase">{o.paymentMethod}</span></td>
+                                   <td className="px-6 py-6"><p className="text-[10px] font-black text-sky-400 uppercase italic leading-none">{o.createdBy}</p></td>
+                                   <td className="px-6 py-6 text-center"><span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-400 border-emerald-100' : o.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-400 border-orange-100' : 'bg-slate-50 text-slate-300 border-slate-100'}`}>{o.status}</span></td>
+                                   <td className="px-10 py-6 text-right"><span className="text-[16px] font-black italic text-slate-400">{formatCurrency(o.totalAmount)}</span></td>
                                 </tr>
                              ))
                            ) : (
                              paginatedAR.map((item, i) => (
                                 <tr key={i} className="hover:bg-emerald-50/50 transition-colors group">
-                                   <td className="px-10 py-6 text-[10px] font-bold text-slate-900">{new Date(item.payment.paidAt).toLocaleDateString()}</td>
-                                   <td className="px-4 py-6"><span className="font-mono font-black text-sky-600">PAY-{item.payment.id.slice(-4)}</span></td>
-                                   <td className="px-10 py-6 font-black uppercase italic text-slate-800 text-[12px]">{item.order?.customerName}</td>
-                                   <td className="px-4 py-6 text-[10px] font-bold text-slate-500">{item.payment.paymentMethod}</td>
-                                   <td colSpan={2} className="px-6 py-6 text-center"><span className="px-3 py-1 rounded-lg text-[8px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100">COLLECTED</span></td>
-                                   <td className="px-10 py-6 text-right font-black italic text-emerald-700 text-base">{formatCurrency(item.payment.amount)}</td>
+                                   <td className="px-10 py-6 text-[10px] font-bold text-slate-400">{new Date(item.payment.paidAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                                   <td className="px-4 py-6"><span className="font-mono font-black text-sky-400">PAY-{item.payment.id.slice(-4)}</span></td>
+                                   <td className="px-10 py-6 font-black uppercase italic text-slate-500 text-[12px]">{item.order?.customerName}</td>
+                                   <td className="px-4 py-6 text-[10px] font-bold text-slate-400">{item.payment.paymentMethod}</td>
+                                   <td colSpan={2} className="px-6 py-6 text-center"><span className="px-3 py-1 rounded-lg text-[8px] font-black uppercase bg-emerald-50 text-emerald-400 border border-emerald-100">COLLECTED</span></td>
+                                   <td className="px-10 py-6 text-right font-black italic text-emerald-600 text-base">{formatCurrency(item.payment.amount)}</td>
                                 </tr>
                              ))
                            )}
                         </tbody>
                      </table>
                   </div>
-                  
-                  {/* PAGINATION ENGINE */}
-                  {currentTotalPages > 1 && (
-                    <div className="px-10 py-8 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0 pagination-controls">
-                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Registry turn {currentPage} of {currentTotalPages}</p>
-                       <div className="flex gap-4">
-                          <button disabled={currentPage === 1} onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} className="px-8 py-3 bg-white text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 hover:bg-sky-50 transition-all disabled:opacity-20 active:scale-95">Previous Turn</button>
-                          <button disabled={currentPage === currentTotalPages} onClick={() => setCurrentPage(prev => Math.min(currentTotalPages, prev + 1))} className="px-8 py-3 bg-slate-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-all disabled:opacity-20 active:scale-95">Next Turn</button>
-                       </div>
-                    </div>
-                  )}
                </div>
             </div>
          </div>
       </div>
 
-      {/* DETAIL OVERLAY */}
       {selectedOrder && (
          <div className="fixed inset-0 z-[5000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md animate-in zoom-in duration-300 no-print" onClick={() => setSelectedOrder(null)}>
             <div className="bg-white w-full max-w-[500px] rounded-[56px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
