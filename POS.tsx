@@ -1,8 +1,8 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User, Customer, Product, Stock, Order, OrderStatus, OrderItem, Employee, Store, EmployeeType, UserRole, AccountsReceivable, ReceivablePayment, PaymentMethod } from './types';
 import { PICKUP_CUSTOMER } from './constants';
 import CustomDatePicker from './components/CustomDatePicker';
-// Added missing AceCorpLogo import
 import AceCorpLogo from './components/AceCorpLogo';
 
 interface POSProps {
@@ -21,7 +21,6 @@ interface POSProps {
   setShowHistoryPanel: React.Dispatch<React.SetStateAction<boolean>>;
   receivables?: AccountsReceivable[];
   onSync: (immediateOrders?: Order[], immediateStocks?: Stock[], immediateCustomers?: Customer[], immediateReceivables?: AccountsReceivable[], immediateReceivablePayments?: ReceivablePayment[]) => Promise<boolean>;
-  // Added missing logoUrl prop
   logoUrl?: string;
 }
 
@@ -64,7 +63,8 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   const [suggestions, setSuggestions] = useState<Customer[]>([]);
   const [activeSuggestionField, setActiveSuggestionField] = useState<'phone' | 'firstName' | 'lastName' | null>(null);
 
-  const LOW_STOCK_THRESHOLD = 3;
+  // Requirement: Update threshold to 10 units for color coding
+  const LOW_STOCK_THRESHOLD = 10;
   const isAdmin = user.role === UserRole.ADMIN;
 
   const getPHTimestamp = () => new Date().toISOString();
@@ -516,7 +516,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     setIsReceiptPreviewOpen(true);
   };
 
-  // Added generateReceiptPart helper function to fix missing function error
   const generateReceiptPart = (order: Order, label: string) => {
     const store = stores.find(s => s.id === order.storeId);
     return (
@@ -766,8 +765,10 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
             <div className="flex-1 overflow-y-auto custom-scrollbar grid grid-cols-2 md:grid-cols-3 gap-6 pr-2">
               {products.filter(p => p.type === 'Cylinders' && p.status === 'Active').map(p => {
                 const stock = getStockForStore(p.id);
+                // Color Logic: Red(0), Orange(1-9), Green(10+)
+                const stockColor = stock === 0 ? 'text-red-500' : stock < LOW_STOCK_THRESHOLD ? 'text-orange-500' : 'text-emerald-500';
                 return (
-                  <button key={p.id} onClick={() => { addToCart(p, false); setShowCylinderPicker(false); setPendingRefillProduct(null); }} disabled={stock <= 0} className={`p-6 bg-white border rounded-[32px] text-left hover:border-sky-300 hover:shadow-xl transition-all flex flex-col group ${stock <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : 'border-slate-100 shadow-sm'}`}><span className="text-[10px] font-black text-slate-800 uppercase italic leading-tight mb-2 group-hover:text-sky-600">{p.name}</span><span className="text-[14px] font-black text-slate-900 mt-auto">₱{formatCurrency(p.price)}</span><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">{stock} Ready</p></button>
+                  <button key={p.id} onClick={() => { addToCart(p, false); setShowCylinderPicker(false); setPendingRefillProduct(null); }} disabled={stock <= 0} className={`p-6 bg-white border rounded-[32px] text-left hover:border-sky-300 hover:shadow-xl transition-all flex flex-col group ${stock <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : 'border-slate-100 shadow-sm'}`}><span className="text-[10px] font-black text-slate-800 uppercase italic leading-tight mb-2 group-hover:text-sky-600">{p.name}</span><span className="text-[14px] font-black text-slate-900 mt-auto">₱{formatCurrency(p.price)}</span><p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${stockColor}`}>{stock} Ready</p></button>
                 );
               })}
             </div>
@@ -978,12 +979,15 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
           <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 custom-scrollbar content-start">
             {products.filter(p => p.status === 'Active' && (activeTypeTab === 'ALL' || p.type === activeTypeTab) && p.name.toLowerCase().includes(searchQuery.toLowerCase())).map(p => {
                const stock = getStockForStore(p.id);
+               // Requirement: Color coding Red(0), Orange(1-9), Green(10+)
+               const stockColor = stock === 0 ? 'text-red-500' : stock < LOW_STOCK_THRESHOLD ? 'text-orange-500' : 'text-emerald-500';
+               
                return (
                  <button key={p.id} onClick={() => p.type === 'Refill' ? setPendingRefillProduct(p) : addToCart(p)} disabled={stock <= 0} className={`p-6 bg-white border rounded-[32px] text-left hover:border-sky-300 hover:shadow-xl transition-all flex flex-col group ${stock <= 0 ? 'opacity-40 grayscale border-transparent shadow-none' : 'border-slate-100 shadow-sm'}`}>
                     <h4 className="font-black text-slate-800 uppercase italic text-[11px] leading-tight group-hover:text-sky-600 transition-colors mb-2">{p.name}</h4>
                     <div className="mt-auto text-slate-900">
                        <p className="text-base font-black">₱{formatCurrency(p.price)}</p>
-                       <p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${stock <= LOW_STOCK_THRESHOLD ? 'text-amber-500' : 'text-slate-400'}`}>{stock} Units Ready</p>
+                       <p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${stockColor}`}>{stock} Units Ready</p>
                     </div>
                  </button>
                );
@@ -991,4 +995,130 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
           </div>
         </section>
 
-        <aside className="w
+        <aside className="w-[380px] bg-white border-l border-slate-200 flex flex-col shadow-2xl shrink-0 text-gray-900" ref={suggestionContainerRef}>
+          <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+            <div><h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">CRM Database</h3><span className="text-2xl font-black italic text-slate-800 uppercase tracking-tighter">Registry</span></div>
+            <button disabled={isSyncingProfile} onClick={() => handleUpdateProfile()} className="px-6 py-2.5 bg-[#f1f5f9] text-[#2d89c8] rounded-2xl flex items-center gap-3 hover:bg-sky-100 transition-all text-[10px] font-black uppercase tracking-widest shadow-sm active:scale-95 disabled:opacity-50">
+              {isSyncingProfile ? <i className="fas fa-circle-notch animate-spin"></i> : <i className="fas fa-save"></i>} SYNC
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+             <div className="flex flex-col gap-8">
+                <div className="flex flex-col gap-3 relative">
+                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mobile Access</label>
+                   <input value={customerPhone} onChange={handlePhoneChange} placeholder="09XX-XXX-XXXX" className="w-full px-8 py-6 bg-[#f8fafc] border-none rounded-[32px] text-[16px] font-black italic outline-none focus:ring-4 focus:ring-sky-50 transition-all text-slate-900 disabled:opacity-40 placeholder:text-slate-300 shadow-sm" />
+                   {activeSuggestionField === 'phone' && suggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-2 bg-white border border-slate-100 rounded-[32px] shadow-2xl z-[500] overflow-hidden max-h-72 animate-in slide-in-from-top-4 duration-300">
+                         {suggestions.map((s, i) => (
+                            <button key={i} onClick={() => selectCustomer(s)} className="w-full px-8 py-5 text-left hover:bg-sky-50 border-b border-slate-50 flex flex-col group transition-colors">
+                                <div className="flex justify-between items-center w-full">
+                                    <span className="text-[14px] font-black uppercase italic group-hover:text-sky-600">{(s.firstName || s.lastName) ? `${s.firstName} ${s.lastName}` : (s.names?.[0] || 'Unknown')}</span>
+                                    <span className="text-[12px] font-bold text-sky-500 tracking-widest font-mono">{s.contactNumber}</span>
+                                </div>
+                            </button>
+                         ))}
+                      </div>
+                   )}
+                </div>
+                <div className="grid grid-cols-2 gap-5">
+                   <div className="flex flex-col gap-3 relative">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">First Name</label>
+                      <input value={customerData.firstName} onChange={e => handleFieldChange('firstName', e.target.value)} className="w-full px-6 py-5 bg-[#f8fafc] border-none rounded-[28px] text-[14px] font-black italic outline-none focus:ring-4 focus:ring-sky-50 transition-all text-slate-900 disabled:opacity-40 uppercase shadow-sm" />
+                      {activeSuggestionField === 'firstName' && suggestions.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-2 bg-white border border-slate-100 rounded-[32px] shadow-2xl z-[500] overflow-hidden max-h-72 animate-in slide-in-from-top-4 duration-300">
+                           {suggestions.map((s, i) => (
+                              <button key={i} onClick={() => selectCustomer(s)} className="w-full px-6 py-4 text-left hover:bg-sky-50 border-b border-slate-50 flex flex-col group transition-colors">
+                                  <span className="text-[12px] font-black uppercase italic group-hover:text-sky-600">{s.firstName} {s.lastName}</span>
+                                  <span className="text-[9px] font-bold text-slate-400">{s.contactNumber}</span>
+                              </button>
+                           ))}
+                        </div>
+                      )}
+                   </div>
+                   <div className="flex flex-col gap-3 relative">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Last Name</label>
+                      <input value={customerData.lastName} onChange={e => handleFieldChange('lastName', e.target.value)} className="w-full px-6 py-5 bg-[#f8fafc] border-none rounded-[28px] text-[14px] font-black italic outline-none focus:ring-4 focus:ring-sky-50 transition-all text-slate-900 disabled:opacity-40 uppercase shadow-sm" />
+                      {activeSuggestionField === 'lastName' && suggestions.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-2 bg-white border border-slate-100 rounded-[32px] shadow-2xl z-[500] overflow-hidden max-h-72 animate-in slide-in-from-top-4 duration-300">
+                           {suggestions.map((s, i) => (
+                              <button key={i} onClick={() => selectCustomer(s)} className="w-full px-6 py-4 text-left hover:bg-sky-50 border-b border-slate-50 flex flex-col group transition-colors">
+                                  <span className="text-[12px] font-black uppercase italic group-hover:text-sky-600">{s.firstName} {s.lastName}</span>
+                                  <span className="text-[9px] font-bold text-slate-400">{s.contactNumber}</span>
+                              </button>
+                           ))}
+                        </div>
+                      )}
+                   </div>
+                </div>
+                <div className="flex flex-col gap-3"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Disc. Rate (Protocol)</label><input type="number" value={customerData.discount === 'null' ? '' : customerData.discount} onChange={e => handleFieldChange('discount', e.target.value)} className="w-full px-8 py-6 bg-[#f8fafc] border-none rounded-[32px] text-[16px] font-black italic outline-none focus:ring-4 focus:ring-sky-50 transition-all text-slate-900 shadow-sm" placeholder="0.00" /></div>
+                <div className="flex flex-col gap-3"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Address</label><input value={customerData.address} onChange={e => handleFieldChange('address', e.target.value)} className="w-full px-8 py-5 bg-[#f8fafc] border-none rounded-[28px] text-[13px] font-black italic outline-none text-slate-900 uppercase shadow-sm" /></div>
+                <div className="grid grid-cols-2 gap-5"><div className="flex flex-col gap-3"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">City</label><input value={customerData.city} onChange={e => handleFieldChange('city', e.target.value)} className="w-full px-6 py-5 bg-[#f8fafc] border-none rounded-[28px] text-[13px] font-black italic outline-none text-slate-900 uppercase shadow-sm" /></div><div className="flex flex-col gap-3"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Landmark</label><input value={customerData.landmark} onChange={e => handleFieldChange('landmark', e.target.value)} className="w-full px-6 py-5 bg-[#f8fafc] border-none rounded-[28px] text-[13px] font-black italic outline-none text-slate-900 uppercase shadow-sm" /></div></div>
+                <div className="flex flex-col gap-3"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Customer Notes</label><textarea rows={4} value={customerData.notes} onChange={e => handleFieldChange('notes', e.target.value)} className="w-full px-8 py-6 bg-[#f8fafc] border-none rounded-[40px] text-[13px] font-black italic outline-none text-slate-900 uppercase resize-none shadow-inner" placeholder="SAVED NOTES FOR PROTOCOL ALERTS..." /></div>
+                {customerReceivables.length > 0 && (
+                  <div className="flex flex-col gap-3 pt-4 border-t border-slate-100">
+                    <label className="text-[10px] font-black text-red-400 uppercase tracking-widest ml-1 flex items-center gap-2"><i className="fas fa-exclamation-circle"></i> Outstanding Balance</label>
+                    <div className="space-y-3">
+                      {customerReceivables.map(ar => (
+                        <div key={ar.id} className="p-5 bg-red-50 border border-red-100 rounded-[28px] relative overflow-hidden">
+                           <div className="flex justify-between items-start mb-2"><div><p className="text-[9px] font-bold text-red-400 uppercase tracking-widest">Ref: {ar.orderId.slice(-8)}</p><p className="text-[8px] font-bold text-slate-400 uppercase">{toPHDateString(ar.createdAt)}</p></div><span className="text-[14px] font-black text-red-600 italic">₱{formatCurrency(ar.outstandingAmount)}</span></div>
+                           {ar.remarks && <p className="text-[9px] font-black text-slate-500 uppercase italic mb-3">"{ar.remarks}"</p>}
+                           <button onClick={() => addDebtToCart(ar)} className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><i className="fas fa-wallet"></i> Pay Now</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+             </div>
+          </div>
+        </aside>
+      </div>
+
+      {showHistoryPanel && (
+        <div className={`fixed inset-0 z-[4000] flex justify-end animate-in fade-in duration-300 text-gray-900 no-print`}>
+          <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={() => { setShowHistoryPanel(false); setSelectedHistoryOrder(null); }}></div>
+          <div className="w-full max-w-[1000px] bg-[#f8fafc] h-full shadow-2xl relative z-10 flex flex-col animate-in slide-in-from-right duration-500 overflow-hidden rounded-l-[48px] border-l border-slate-200">
+             <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                <div><h3 className="text-2xl font-black uppercase italic tracking-tighter leading-none text-black">History Registry</h3><div className="flex gap-4 mt-3">{['store', 'pickup', 'delivery', 'customer'].map((tab) => (<button key={tab} onClick={() => { setHistoryTab(tab as any); setSelectedHistoryOrder(null); }} className={`px-5 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${historyTab === tab ? 'bg-sky-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{tab}</button>))}</div></div>
+                <button onClick={() => { setShowHistoryPanel(false); setSelectedHistoryOrder(null); }} className="w-10 h-10 rounded-2xl bg-slate-50 text-slate-300 hover:text-red-500 transition-all flex items-center justify-center border border-slate-100"><i className="fas fa-times text-xl"></i></button>
+             </div>
+             <div className="flex-1 flex overflow-hidden">
+                <div className={`flex-[1.2] flex flex-col border-r border-slate-200 bg-white overflow-hidden ${selectedHistoryOrder ? 'hidden md:flex' : 'flex'}`}>
+                   <div className="px-6 py-5 bg-white border-b border-slate-100 sticky top-0 z-20 space-y-3"><CustomDatePicker value={historyDate} onChange={setHistoryDate} className="w-full" /><select value={historyStatusFilter} onChange={(e) => setHistoryStatusFilter(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:border-sky-500 transition-all cursor-pointer text-slate-600"><option value="ALL">All Status</option><option value={OrderStatus.ORDERED}>Ordered</option><option value={OrderStatus.RECEIVABLE}>Receivable</option><option value={OrderStatus.CANCELLED}>Cancelled</option></select></div>
+                   <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-[#fcfdfe]">{filteredHistory.map(o => (<button key={o.id} onClick={() => { setSelectedHistoryOrder(o); setShowHistoryReceipt(false); }} className={`w-full flex flex-col p-4 rounded-[20px] transition-all text-left border-2 ${selectedHistoryOrder?.id === o.id ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-transparent hover:bg-slate-50'}`}><div className="flex justify-between items-start mb-2"><span className="text-[9px] font-black text-slate-800 uppercase italic">ID: {o.id.slice(-8)}</span><span className="text-[9px] font-bold text-slate-400 italic">{new Date(o.createdAt).toLocaleDateString()}</span></div><p className="text-[10px] font-black uppercase italic truncate">{o.customerName}</p><div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-50"><span className="text-[11px] font-black italic">₱{formatCurrency(o.totalAmount)}</span><span className="text-[9px] font-bold text-sky-600 uppercase italic">BY: {o.createdBy}</span><span className={`text-[8px] font-black uppercase tracking-widest ${o.status === OrderStatus.CANCELLED ? 'text-red-500' : o.status === OrderStatus.RECEIVABLE ? 'text-orange-500' : 'text-emerald-500'}`}>{o.status}</span></div></button>))}</div>
+                </div>
+                <div className={`flex-[1.8] bg-[#f8fafc] flex flex-col overflow-hidden ${!selectedHistoryOrder ? 'hidden md:flex' : 'flex'}`}>
+                   {selectedHistoryOrder ? (
+                     <>
+                        <div className="p-8 border-b bg-white flex justify-between items-center shrink-0"><div className="flex items-center gap-4"><h4 className="text-2xl font-black italic tracking-tighter uppercase text-slate-900">{showHistoryReceipt ? 'Receipt Mirror' : 'Order Detail'}</h4><button onClick={() => setShowHistoryReceipt(!showHistoryReceipt)} className="px-4 py-2 bg-sky-50 text-sky-600 rounded-xl text-[9px] font-black uppercase hover:bg-sky-100 transition-all">{showHistoryReceipt ? 'View Data' : 'View Receipt'}</button></div></div>
+                        <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
+                           {showHistoryReceipt ? (
+                              <div className="bg-white p-8 shadow-sm border border-slate-200 mx-auto w-full max-w-[320px] thermal-preview text-black">
+                                <div className="w-full bg-white">
+                                  {generateReceiptPart(selectedHistoryOrder, 'CUSTOMER COPY')}
+                                </div>
+                              </div>
+                           ) : (
+                              <div className="space-y-8"><div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-4"><div className="flex justify-between items-start"><div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Customer Profile</label><p className="text-[14px] font-black text-slate-800 uppercase italic">{selectedHistoryOrder.customerName}</p></div><div className="text-right">{selectedHistoryOrder.riderName && (<div className="mb-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Logistics</label><p className="text-[12px] font-black text-sky-600 uppercase italic">{selectedHistoryOrder.riderName}</p></div>)}<div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Operator (User ID)</label><p className="text-[12px] font-black text-slate-700 uppercase italic">{selectedHistoryOrder.createdBy}</p></div></div></div><div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Address</label><p className="text-[11px] font-bold text-slate-600 uppercase italic">{selectedHistoryOrder.address}</p></div><div className="flex justify-between"><div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Settlement Method</label><p className="text-[11px] font-black text-emerald-600 uppercase italic">{selectedHistoryOrder.paymentMethod}</p></div></div>{selectedHistoryOrder.remark && (<div className="pt-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Session Remarks</label><p className="text-[11px] font-black text-amber-600 uppercase italic bg-amber-50 p-2 rounded-lg border border-amber-100">{selectedHistoryOrder.remark}</p></div>)}</div><div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden"><table className="w-full text-left font-bold text-gray-900"><thead className="bg-slate-50/50 border-b border-slate-100"><tr className="text-[9px] font-black text-slate-400 uppercase"><th className="px-8 py-4">Asset Detail</th><th className="px-8 py-4 text-right">Value</th></tr></thead><tbody className="divide-y divide-slate-100">{selectedHistoryOrder.items.map((item, idx) => (<tr key={idx}><td className="px-8 py-4"><span className="text-[12px] font-black uppercase italic text-slate-800">{item.productName} (x{item.qty})</span></td><td className="px-8 py-4 text-right text-[12px] font-black italic text-slate-900">₱{formatCurrency(item.total).replace('₱','')}</td></tr>))}</tbody></table></div><div className="space-y-2">{selectedHistoryOrder.totalDiscount > 0 && (<div className="flex justify-between items-center px-8 text-[11px] font-bold text-slate-400 uppercase tracking-widest"><span>Applied Discount</span><span className="text-emerald-500">- ₱{formatCurrency(selectedHistoryOrder.totalDiscount)}</span></div>)}<div className="p-6 bg-slate-950 rounded-[32px] flex justify-between items-center text-white shadow-2xl"><span className="text-[11px] font-black uppercase tracking-widest italic">Settlement Total</span><span className="text-3xl font-black italic">₱{formatCurrency(selectedHistoryOrder.totalAmount)}</span></div></div></div>
+                           )}
+                        </div>
+                        <div className="p-8 border-t bg-white grid grid-cols-3 gap-3 shrink-0 relative">
+                           <button onClick={handleModifyOrder} disabled={selectedHistoryOrder.status === OrderStatus.CANCELLED} className="py-5 bg-[#2d5da7] text-white rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all disabled:opacity-30">Modify Order</button>
+                           <button onClick={handleReprint} className="py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><i className="fas fa-print"></i> Reprint</button>
+                           {isAdmin && (
+                              <button onClick={handleVoidOrder} disabled={selectedHistoryOrder.status === OrderStatus.CANCELLED} className="py-5 bg-white border-2 border-red-100 text-red-500 rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all hover:bg-red-50 disabled:opacity-30 disabled:border-slate-100 disabled:text-slate-300">Void Order</button>
+                           )}
+                        </div>
+                     </>
+                   ) : (
+                     <div className="flex-1 flex flex-col items-center justify-center opacity-10 py-32 text-slate-400"><i className="fas fa-file-invoice-dollar text-8xl mb-8"></i><p className="text-xl font-black uppercase tracking-[0.4em]">Select a Session</p></div>
+                   )}
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default POS;

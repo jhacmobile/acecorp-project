@@ -50,7 +50,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
   const [showOrderReceipt, setShowOrderReceipt] = useState(false);
   const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
   
-  // Pagination State
+  // Pagination State - 25 items per page for Audit
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 25;
 
@@ -168,7 +168,9 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     const store = stores.find(s => s.id === order.storeId);
     return (
        <div className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
-          <div className="w-48 h-auto max-h-32 mx-auto mb-0 overflow-hidden flex items-center justify-center"><AceCorpLogo customUrl={logoUrl} className="w-full h-auto" /></div>
+          <div className="w-48 h-48 mx-auto mb-4">
+             <AceCorpLogo customUrl={logoUrl} />
+          </div>
           <div className="border border-black px-4 py-1 inline-block mb-1"><h3 className="text-[12px] font-black uppercase tracking-widest">{label}</h3></div>
           <h4 className="text-sm font-black uppercase italic leading-none mb-1 text-black">{store?.name || 'ACECORP'}</h4>
           <p className="text-[10px] uppercase font-bold leading-tight text-black">{store?.address || ''}</p>
@@ -326,29 +328,29 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
          )}
       </div>
 
-      {/* SALES MANIFEST ROOT - TARGETS FULL ARRAY FOR COMPLETE PRINTING */}
+      {/* SALES MANIFEST ROOT - CRITICAL: Targets COMPLETE ARRAY for unpaginated printing */}
       <div id="audit-manifest-report-root" className={selectedOrder ? "hidden" : "hidden text-black font-sans"}>
           <div className="report-container">
              <div className="text-center mb-10 border-b-4 border-black pb-8">
                 <h1 className="text-3xl font-black uppercase italic tracking-tighter mb-2">{headerName}</h1>
-                <p className="text-sm font-bold uppercase tracking-[0.3em] opacity-80">Master Audit Registry • Sales Manifest</p>
+                <p className="text-sm font-bold uppercase tracking-[0.3em] opacity-80">Master Audit Registry • Sales Manifest (COMPLETE)</p>
                 <div className="mt-8 flex justify-center items-center gap-12 text-[10px] font-black uppercase">
                    <div className="flex flex-col"><span className="opacity-40">Period</span><span>{reportPeriod.toUpperCase()}</span></div>
                    <div className="flex flex-col"><span className="opacity-40">Registry Date</span><span>{date}</span></div>
-                   <div className="flex flex-col text-sky-600"><span className="opacity-40">Prepared By</span><span>{user.username}</span></div>
+                   <div className="flex flex-col text-sky-600"><span className="opacity-40">Audit Op</span><span>{user.username}</span></div>
                 </div>
              </div>
              
              <div className="grid grid-cols-2 gap-10 mb-12 py-8 bg-slate-50/50 rounded-[20px] border border-black/5 px-10">
                 <div className="space-y-4">
                    <p className="text-[10px] font-black uppercase text-slate-400 border-b border-black/10 pb-2">Fiscal Performance Summary</p>
-                   <div className="flex justify-between text-xs"><span>Registry Record Count:</span> <b>{filteredOrders.length} Entries</b></div>
-                   <div className="flex justify-between text-xs"><span>Gross Booked Revenue:</span> <b>{formatCurrency(stats.totalSales + stats.newARGenerated)}</b></div>
-                   <div className="flex justify-between text-xs text-emerald-600"><span>Collections Inflow (AR):</span> <b>{formatCurrency(stats.arCollectionsTotal)}</b></div>
-                   <div className="flex justify-between font-black text-xl border-t-2 border-black pt-4 mt-2"><span>Total Liquidity Inflow:</span> <span>{formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</span></div>
+                   <div className="flex justify-between text-xs"><span>Total Records in Period:</span> <b>{filteredOrders.length} Entries</b></div>
+                   <div className="flex justify-between text-xs"><span>Booked Revenue:</span> <b>{formatCurrency(stats.totalSales + stats.newARGenerated)}</b></div>
+                   <div className="flex justify-between text-xs text-emerald-600"><span>AR Collections:</span> <b>{formatCurrency(stats.arCollectionsTotal)}</b></div>
+                   <div className="flex justify-between font-black text-xl border-t-2 border-black pt-4 mt-2"><span>Liquid Inflow:</span> <span>{formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</span></div>
                 </div>
                 <div className="border-l border-black/10 pl-12 space-y-3">
-                   <p className="text-[10px] font-black uppercase text-slate-400 border-b border-black/10 pb-2">Settlement Channel Analysis</p>
+                   <p className="text-[10px] font-black uppercase text-slate-400 border-b border-black/10 pb-2">Settlement Distribution</p>
                    {Object.entries(stats.paymentBreakdown).map(([m, val]) => (
                       <div key={m} className="flex justify-between text-[11px] font-bold"><span>{m}:</span> <b>{formatCurrency(val as number)}</b></div>
                    ))}
@@ -389,9 +391,9 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   </div>
                 </div>
                 <div className="text-right space-y-2">
-                  <p className="opacity-40">Registry Audit Information</p>
-                  <p>Timestamp: {new Date().toLocaleString()}</p>
-                  <p className="font-mono text-[9px] tracking-tight">ACE_EM_SECURE_MANIFEST_V3.2</p>
+                  <p className="opacity-40">Audit Mirror Information</p>
+                  <p>Generated: {new Date().toLocaleString()}</p>
+                  <p className="font-mono text-[9px] tracking-tight">ACECORP_SECURE_AUDIT_V4.0</p>
                 </div>
              </div>
           </div>
@@ -435,10 +437,6 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   <div className="space-y-3"><label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Reference Date</label><CustomDatePicker value={date} onChange={setDate} className="w-full" /></div>
                   <div className="space-y-3 p-6 bg-slate-50 rounded-[32px] border border-slate-100"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Registry Type</label><div className="flex gap-2 p-1 bg-white rounded-xl shadow-sm">{(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (<button key={p} onClick={() => setReportPeriod(p)} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${reportPeriod === p ? 'bg-[#2d89c8] text-white shadow-md' : 'text-slate-400'}`}>{p}</button>))}</div></div>
                </div>
-               <div className="pt-10 border-t border-slate-50">
-                  <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-1">Session Preparer</p>
-                  <p className="text-[11px] font-black text-sky-600 uppercase italic">{user.username}</p>
-               </div>
             </div>
          </aside>
 
@@ -450,33 +448,41 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                </div>
                <div className="flex items-center gap-3">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    {auditMode === 'SALES' ? filteredOrders.length : arCollectionRegistry.length} Records Analyzed
+                    {auditMode === 'SALES' ? filteredOrders.length : arCollectionRegistry.length} Total Records Analyzed
                   </span>
                </div>
             </div>
             <div className="flex-1 overflow-x-auto custom-scrollbar p-8 flex flex-col">
                <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden min-w-[900px] flex-1">
                   <table className="w-full text-left">
-                     <thead className="bg-slate-50 text-[9px] text-slate-400 font-black uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 shadow-sm"><tr><th className="px-8 py-6">Timestamp</th><th className="px-4 py-6 text-sky-600">Ticket #</th><th className="px-8 py-6">Customer Profile</th><th className="px-4 py-6">Method</th><th className="px-4 py-6">Operator</th><th className="px-6 py-6 text-center">Status</th><th className="px-8 py-6 text-right">Value</th></tr></thead>
+                     <thead className="bg-slate-50 text-[9px] text-slate-400 font-black uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 shadow-sm"><tr><th className="px-8 py-6">Timestamp</th><th className="px-4 py-6 text-sky-600">Ticket #</th><th className="px-8 py-6">Entity Profile</th><th className="px-4 py-6">Method</th><th className="px-4 py-6">Operator</th><th className="px-6 py-6 text-center">Status</th><th className="px-8 py-6 text-right">Value</th></tr></thead>
                      <tbody className="divide-y divide-slate-50">
                         {auditMode === 'SALES' ? (
-                          paginatedOrders.map(o => (
-                             <tr key={o.id} onClick={() => { setSelectedOrder(o); setShowOrderReceipt(false); setPrintCopyType('ALL'); }} className="hover:bg-slate-50/50 transition-colors cursor-pointer group"><td className="px-8 py-6 font-mono text-[10px] text-slate-600"><div className="font-bold text-slate-900">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div><div className="text-[8px] opacity-40">{toPHDateString(o.createdAt)}</div></td><td className="px-4 py-6"><span className="font-mono font-black text-[10px] text-sky-600">#{o.id.slice(-8)}</span></td><td className="px-8 py-6"><p className="text-[11px] font-black uppercase italic text-slate-900 leading-none">{o.customerName}</p></td><td className="px-4 py-6"><span className="text-[9px] font-bold text-slate-500 uppercase">{o.paymentMethod}</span></td><td className="px-4 py-6"><p className="text-[11px] font-black uppercase italic text-sky-600">{o.createdBy}</p></td><td className="px-6 py-6 text-center"><span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : o.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-500'}`}>{o.status}</span></td><td className="px-8 py-6 text-right"><span className="text-[14px] font-black italic text-slate-900">{formatCurrency(o.totalAmount)}</span></td></tr>
-                          ))
+                          paginatedOrders.length === 0 ? (
+                            <tr><td colSpan={7} className="px-10 py-20 text-center text-slate-300 font-black uppercase italic tracking-widest opacity-40">Empty sales registry in this window</td></tr>
+                          ) : (
+                            paginatedOrders.map(o => (
+                               <tr key={o.id} onClick={() => { setSelectedOrder(o); setShowOrderReceipt(false); setPrintCopyType('ALL'); }} className="hover:bg-slate-50/50 transition-colors cursor-pointer group"><td className="px-8 py-6 font-mono text-[10px] text-slate-600"><div className="font-bold text-slate-900">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div><div className="text-[8px] opacity-40">{toPHDateString(o.createdAt)}</div></td><td className="px-4 py-6"><span className="font-mono font-black text-[10px] text-sky-600">#{o.id.slice(-8)}</span></td><td className="px-8 py-6"><p className="text-[11px] font-black uppercase italic text-slate-900 leading-none">{o.customerName}</p></td><td className="px-4 py-6"><span className="text-[9px] font-bold text-slate-500 uppercase">{o.paymentMethod}</span></td><td className="px-4 py-6"><p className="text-[11px] font-black uppercase italic text-sky-600">{o.createdBy}</p></td><td className="px-6 py-6 text-center"><span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : o.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-500'}`}>{o.status}</span></td><td className="px-8 py-6 text-right"><span className="text-[14px] font-black italic text-slate-900">{formatCurrency(o.totalAmount)}</span></td></tr>
+                            ))
+                          )
                         ) : (
-                          paginatedAR.map((item, i) => (
-                             <tr key={i} className="hover:bg-slate-50/50 transition-colors group"><td className="px-8 py-6 text-[10px] font-bold text-slate-900">{new Date(item.payment.paidAt).toLocaleDateString()}</td><td className="px-4 py-6"><span className="font-mono font-black text-sky-600">PAY-{item.payment.id.slice(-4)}</span></td><td className="px-8 py-6 font-black uppercase italic text-slate-800 text-[11px]">{item.order?.customerName}</td><td className="px-4 py-6 text-[10px] font-bold text-slate-500">{item.payment.paymentMethod}</td><td colSpan={2} className="px-6 py-6 text-center"><span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100">COLLECTED</span></td><td className="px-8 py-6 text-right font-black italic text-emerald-700">{formatCurrency(item.payment.amount)}</td></tr>
-                          ))
+                          paginatedAR.length === 0 ? (
+                            <tr><td colSpan={7} className="px-10 py-20 text-center text-slate-300 font-black uppercase italic tracking-widest opacity-40">No collections registered in window</td></tr>
+                          ) : (
+                            paginatedAR.map((item, i) => (
+                               <tr key={i} className="hover:bg-slate-50/50 transition-colors group"><td className="px-8 py-6 text-[10px] font-bold text-slate-900">{new Date(item.payment.paidAt).toLocaleDateString()}</td><td className="px-4 py-6"><span className="font-mono font-black text-sky-600">PAY-{item.payment.id.slice(-4)}</span></td><td className="px-8 py-6 font-black uppercase italic text-slate-800 text-[11px]">{item.order?.customerName}</td><td className="px-4 py-6 text-[10px] font-bold text-slate-500">{item.payment.paymentMethod}</td><td colSpan={2} className="px-6 py-6 text-center"><span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100">COLLECTED</span></td><td className="px-8 py-6 text-right font-black italic text-emerald-700">{formatCurrency(item.payment.amount)}</td></tr>
+                            ))
+                          )
                         )}
                      </tbody>
                   </table>
                </div>
                
-               {/* Pagination Controls */}
+               {/* Pagination Controls - Egress Control Implementation */}
                {((auditMode === 'SALES' && totalPages > 1) || (auditMode === 'AR_COLLECTION' && arTotalPages > 1)) && (
                  <div className="mt-8 flex items-center justify-between shrink-0 bg-white px-4">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      Page {currentPage} of {auditMode === 'SALES' ? totalPages : arTotalPages}
+                      Showing Page {currentPage} of {auditMode === 'SALES' ? totalPages : arTotalPages}
                     </span>
                     <div className="flex gap-2">
                       <button 
@@ -520,11 +526,11 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                            <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                               <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Personnel Profile</label><p className="text-[14px] font-black text-slate-800 uppercase italic">{selectedOrder.customerName}</p></div>
                               <div className="text-left sm:text-right">
-                                 {selectedOrder.riderName && (<div className="mb-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Logistics</label><p className="text-[12px] font-black text-sky-600 uppercase italic">{selectedOrder.riderName}</p></div>)}
-                                 <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Operator (User ID)</label><p className="text-[12px] font-black text-slate-700 uppercase italic">{selectedOrder.createdBy}</p></div>
+                                 {selectedOrder.riderName && (<div className="mb-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Logistics</label><p className="text-[10px] sm:text-[12px] font-black text-sky-600 uppercase italic">{selectedOrder.riderName}</p></div>)}
+                                 <div><label className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Operator (User ID)</label><p className="text-[12px] font-black text-slate-700 uppercase italic">{selectedOrder.createdBy}</p></div>
                               </div>
                            </div>
-                           <div className="pt-2 border-t border-slate-50 flex justify-between items-center"><div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Settlement Method</label><p className="text-[11px] font-black text-emerald-600 uppercase italic">{selectedOrder.paymentMethod}</p></div><span className={`px-2 py-1 rounded text-[7px] sm:text-[8px] font-black uppercase tracking-widest border ${selectedOrder.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>{selectedOrder.status}</span></div>
+                           <div className="pt-2 border-t border-slate-50 flex justify-between items-center"><div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Settlement Method</label><p className="text-[11px] font-black text-emerald-600 uppercase italic">{selectedOrder.paymentMethod}</p></div><span className={`px-2 py-1 rounded text-[7px] sm:text-[8px] font-black uppercase tracking-widest border ${selectedOrder.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : selectedOrder.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-500'}`}>{selectedOrder.status}</span></div>
                         </div>
                         <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden text-gray-900 font-bold">
                            <table className="w-full text-left">

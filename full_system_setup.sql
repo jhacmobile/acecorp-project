@@ -1,6 +1,6 @@
 
--- ACECORP ENTERPRISE - MASTER SYSTEM INITIALIZATION (V2.0.3)
--- IDEMPOTENT SETUP SCRIPT
+-- ACECORP ENTERPRISE - MASTER SYSTEM INITIALIZATION (V2.0.4)
+-- IDEMPOTENT SETUP SCRIPT WITH FULL REALTIME BROADCAST
 
 BEGIN;
 
@@ -216,16 +216,19 @@ BEGIN
     END LOOP;
 END $$;
 
--- Enable Realtime
+-- Enable Realtime for EVERY Table to ensure multi-device sync
 DROP PUBLICATION IF EXISTS supabase_realtime;
-CREATE PUBLICATION supabase_realtime FOR TABLE chat_messages, orders, stocks, stock_transfers;
+CREATE PUBLICATION supabase_realtime FOR TABLE 
+    chat_messages, orders, stocks, stock_transfers, employees, 
+    customers, stores, products, brands, categories, 
+    accounts_receivable, receivable_payments, attendance, 
+    payroll_history, payroll_drafts, app_settings;
 
 -- 4. STORAGE SETUP
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('assets', 'assets', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Storage Policies with Drop-First logic to prevent 42710 error
 DROP POLICY IF EXISTS "Public Read Access" ON storage.objects;
 CREATE POLICY "Public Read Access" ON storage.objects FOR SELECT USING (bucket_id = 'assets');
 

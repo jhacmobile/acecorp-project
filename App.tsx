@@ -76,14 +76,7 @@ const App = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   
   const isSyncingRef = useRef(false);
-
-  useEffect(() => {
-    if (currentUser) {
-      const rights = currentUser.accessRights;
-      const onlyBandi = rights.bandiPage && !rights.dashboard && !rights.pos && !rights.sales && !rights.inventory && !rights.hrManagement;
-      if (onlyBandi) setActiveTab('bandi');
-    }
-  }, [currentUser]);
+  const lastSyncRef = useRef(0);
 
   const cleanData = (data: any): any => {
     return JSON.parse(JSON.stringify(data, (key, value) => 
@@ -102,12 +95,19 @@ const App = () => {
   };
 
   const fetchData = useCallback(async (tableFilters?: string[]) => {
+    // Avoid redundant fetching if already syncing
+    if (isSyncingRef.current) return;
+    
+    // Throttle repeated global fetches (e.g. on rapid tab switching)
+    if (!tableFilters && Date.now() - lastSyncRef.current < 2000) return;
+
     if (!supabase || !hasValidConfig) {
       setSyncStatus('error');
       setIsAppLoading(false);
       return;
     }
 
+    isSyncingRef.current = true;
     const shouldFetch = (tableName: string) => !tableFilters || tableFilters.includes(tableName);
 
     setSyncStatus('syncing');
@@ -115,6 +115,9 @@ const App = () => {
       const fetchTable = async (table: string, orderCol?: string, ascending: boolean = false, limit?: number, columns: string = '*') => {
         try {
           if (!shouldFetch(table)) return null;
+          // Micro-delay to avoid network flood and browser queue rejection
+          await new Promise(r => setTimeout(r, 80));
+          
           let query = supabase.from(table).select(columns);
           if (orderCol) query = query.order(orderCol, { ascending });
           if (limit) query = query.limit(limit);
@@ -130,7 +133,7 @@ const App = () => {
           return data || [];
         } catch (e: any) {
           if (e.code === '42P01' || e.message?.includes('schema cache')) {
-            console.info(`AceCorp Core: Table [${table}] not found. Skipping.`);
+            console.info(`AceCorp Core: Table [${table}] unavailable.`);
           } else {
             console.warn(`Hydration failure for table [${table}]:`, e.message);
           }
@@ -141,6 +144,7 @@ const App = () => {
       const fetchOrdersOptimized = async () => {
         if (!shouldFetch('orders')) return null;
         try {
+          await new Promise(r => setTimeout(r, 80));
           const ninetyDaysAgo = new Date();
           ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
           const { data, error } = await supabase.from('orders')
@@ -154,9 +158,7 @@ const App = () => {
         }
       };
 
-      // STRICT SEQUENTIAL FETCHING to avoid "TypeError: Failed to fetch"
-      // This ensures we don't flood the browser's connection pool
-      
+      // Sequential Execution for Network Stability
       const pData = await fetchTable('products', 'name', true, undefined, 'id, name, brand, type, price, status, size');
       const sData = await fetchTable('stocks', undefined, false, undefined, 'id, product_id, store_id, quantity, initial_stock, status');
       const stData = await fetchTable('stores', 'name', true, undefined, 'id, name, code, address, phone, mobile');
@@ -204,24 +206,54 @@ const App = () => {
       if (seData && seData.length > 0) setSettings({ logoUrl: seData[0].logo_url || '' });
 
       setSyncStatus('synced');
+      lastSyncRef.current = Date.now();
     } catch (error: any) {
-      console.error("Hydration Critical Failure:", error);
+      console.error("AceCorp Hydration Failure:", error);
       setSyncStatus('error');
     } finally {
       setIsAppLoading(false);
+      isSyncingRef.current = false;
     }
   }, [currentUser?.id]);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { 
+    fetchData(); 
+    
+    // Aggressive Revalidation on tab switch / window focus
+    // This solves Chrome "freezing" or "caching" data in background tabs
+    const handleRevalidation = () => {
+      if (document.visibilityState === 'visible') {
+        fetchData();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleRevalidation);
+    window.addEventListener('focus', handleRevalidation);
+    
+    return () => {
+      window.removeEventListener('visibilitychange', handleRevalidation);
+      window.removeEventListener('focus', handleRevalidation);
+    };
+  }, [fetchData]);
 
   useEffect(() => {
     if (!supabase || !hasValidConfig) return;
-    const channel = supabase.channel('acecorp_realtime_channel')
+    
+    // Enhanced Real-time Channel with status tracking
+    const channel = supabase.channel('acecorp_realtime_broadcast')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchData(['orders']))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stocks' }, () => fetchData(['stocks']))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_transfers' }, () => fetchData(['stock_transfers']))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, () => fetchData(['chat_messages']))
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, () => fetchData(['employees']))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => fetchData(['customers']))
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+           console.warn('AceCorp: Real-time broadcast link unstable. Re-syncing...');
+           fetchData();
+        }
+      });
+
     return () => { supabase.removeChannel(channel); };
   }, [fetchData]);
 
@@ -245,7 +277,7 @@ const App = () => {
   ) => {
     const isManualCall = !!(immediateOrders || immediateStocks || immediateUsers || immediateProducts || immediateBrands || immediateCategories || immediateTransfers || immediateStores || immediateEmployees || immediateCustomers || immediateReceivables || immediateReceivablePayments || immediateAttendance || immediatePayrollHistory || immediatePayrollDraft || immediateSettings);
     if (!supabase || !hasValidConfig || (isSyncingRef.current && !isManualCall)) return false;
-    isSyncingRef.current = true;
+    
     setSyncStatus('syncing');
     try {
       if (immediateSettings) {
@@ -311,18 +343,17 @@ const App = () => {
         const mappedRP = immediateReceivablePayments.map(rp => ({ id: rp.id, receivable_id: rp.receivableId, amount: rp.amount, payment_method: rp.paymentMethod, paid_at: rp.paidAt }));
         await supabase.from('receivable_payments').upsert(cleanData(ensureUnique(mappedRP)), { onConflict: 'id' });
       }
+      
       setSyncStatus('synced');
       if (isManualCall) { 
         setShowSyncToast(true); 
         setTimeout(() => setShowSyncToast(false), 3000); 
         await fetchData(); 
       }
-      isSyncingRef.current = false;
       return true;
     } catch (err: any) {
       console.error("Master Sync Failure:", err.message);
       setSyncStatus('error');
-      isSyncingRef.current = false;
       return false;
     }
   };
