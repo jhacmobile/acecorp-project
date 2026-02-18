@@ -63,6 +63,8 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   const [suggestions, setSuggestions] = useState<Customer[]>([]);
   const [activeSuggestionField, setActiveSuggestionField] = useState<'phone' | 'firstName' | 'lastName' | null>(null);
 
+  // Threshold update requested: below 10 is low stock
+  const LOW_STOCK_THRESHOLD = 10;
   const isAdmin = user.role === UserRole.ADMIN;
 
   const getPHTimestamp = () => new Date().toISOString();
@@ -625,11 +627,11 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
       const stockA = getStockForStore(a.id);
       const stockB = getStockForStore(b.id);
       
-      // Stock vs No Stock Priority
+      // Tier 1: In Stock vs Depleted
       if (stockA > 0 && stockB === 0) return -1;
       if (stockA === 0 && stockB > 0) return 1;
       
-      // Secondary: Alphabetical
+      // Tier 2: Alphabetical Maintenance within tiers
       return a.name.localeCompare(b.name);
     });
   }, [products, activeTypeTab, searchQuery, stocks, user.selectedStoreId]);
@@ -745,8 +747,10 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
             <div className="flex-1 overflow-y-auto custom-scrollbar grid grid-cols-2 md:grid-cols-3 gap-6 pr-2">
               {products.filter(p => p.type === 'Cylinders' && p.status === 'Active').map(p => {
                 const stock = getStockForStore(p.id);
+                // Color states: Red (0), Orange (1-9), Green (10+)
+                const stockColor = stock === 0 ? 'text-red-500' : stock < LOW_STOCK_THRESHOLD ? 'text-orange-500' : 'text-emerald-500';
                 return (
-                  <button key={p.id} onClick={() => { addToCart(p, false); setShowCylinderPicker(false); setPendingRefillProduct(null); }} disabled={stock <= 0} className={`p-6 bg-white border rounded-[32px] text-left hover:border-sky-300 hover:shadow-xl transition-all flex flex-col group ${stock <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : 'border-slate-100 shadow-sm'}`}><span className="text-[10px] font-black text-slate-800 uppercase italic leading-tight mb-2 group-hover:text-sky-600">{p.name}</span><span className="text-[14px] font-black text-slate-900 mt-auto">₱{formatCurrency(p.price)}</span><p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${stock === 0 ? 'text-red-500' : stock < 10 ? 'text-orange-500' : 'text-emerald-500'}`}>{stock} Ready</p></button>
+                  <button key={p.id} onClick={() => { addToCart(p, false); setShowCylinderPicker(false); setPendingRefillProduct(null); }} disabled={stock <= 0} className={`p-6 bg-white border rounded-[32px] text-left hover:border-sky-300 hover:shadow-xl transition-all flex flex-col group ${stock <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : 'border-slate-100 shadow-sm'}`}><span className="text-[10px] font-black text-slate-800 uppercase italic leading-tight mb-2 group-hover:text-sky-600">{p.name}</span><span className="text-[14px] font-black text-slate-900 mt-auto">₱{formatCurrency(p.price)}</span><p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${stockColor}`}>{stock} Ready</p></button>
                 );
               })}
             </div>
@@ -957,15 +961,15 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
           <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 custom-scrollbar content-start">
             {sortedProducts.map(p => {
                const stock = getStockForStore(p.id);
-               // Threshold Logic: Red (0), Orange (<10), Green (10+)
-               const stockLabelColor = stock === 0 ? 'text-red-500' : stock < 10 ? 'text-orange-500' : 'text-emerald-500';
+               // Color logic: Red (0), Orange (1-9), Green (10+)
+               const stockColor = stock === 0 ? 'text-red-500' : stock < LOW_STOCK_THRESHOLD ? 'text-orange-500' : 'text-emerald-500';
                
                return (
                  <button key={p.id} onClick={() => p.type === 'Refill' ? setPendingRefillProduct(p) : addToCart(p)} disabled={stock <= 0} className={`p-6 bg-white border rounded-[32px] text-left hover:border-sky-300 hover:shadow-xl transition-all flex flex-col group ${stock <= 0 ? 'opacity-40 grayscale border-transparent shadow-none' : 'border-slate-100 shadow-sm'}`}>
                     <h4 className="font-black text-slate-800 uppercase italic text-[11px] leading-tight group-hover:text-sky-600 transition-colors mb-2">{p.name}</h4>
                     <div className="mt-auto text-slate-900">
                        <p className="text-base font-black">₱{formatCurrency(p.price)}</p>
-                       <p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${stockLabelColor}`}>{stock} Units Ready</p>
+                       <p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${stockColor}`}>{stock} Units Ready</p>
                     </div>
                  </button>
                );

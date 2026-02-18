@@ -129,44 +129,52 @@ const App = () => {
           if (error) throw error;
           return data || [];
         } catch (e: any) {
-          console.warn(`Hydration failure for table [${table}]:`, e.message);
+          if (e.code === '42P01' || e.message?.includes('schema cache')) {
+            console.info(`AceCorp Core: Table [${table}] not found. Skipping.`);
+          } else {
+            console.warn(`Hydration failure for table [${table}]:`, e.message);
+          }
           return []; 
         }
       };
 
       const fetchOrdersOptimized = async () => {
         if (!shouldFetch('orders')) return null;
-        const ninetyDaysAgo = new Date();
-        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-        
-        const { data, error } = await supabase.from('orders')
-          .select('id, store_id, customer_id, customer_name, address, city, contact, landmark, items, total_amount, total_discount, status, payment_method, created_at, updated_at, created_by, modified_by, remark, returned_cylinder, rider_id, rider_name')
-          .gte('created_at', ninetyDaysAgo.toISOString())
-          .order('created_at', { ascending: false });
-        
-        return error ? [] : data;
+        try {
+          const ninetyDaysAgo = new Date();
+          ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+          const { data, error } = await supabase.from('orders')
+            .select('id, store_id, customer_id, customer_name, address, city, contact, landmark, items, total_amount, total_discount, status, payment_method, created_at, updated_at, created_by, modified_by, remark, returned_cylinder, rider_id, rider_name')
+            .gte('created_at', ninetyDaysAgo.toISOString())
+            .order('created_at', { ascending: false });
+          return error ? [] : data;
+        } catch (e: any) {
+          console.warn(`Hydration failure for table [orders]:`, e.message);
+          return [];
+        }
       };
 
-      const [pData, sData, stData, bData, cData, cuData, oData, eData, exData, tData, uData, mData, seData, arData, rpData, atData, phData, pdData] = await Promise.all([
-        fetchTable('products', 'name', true, undefined, 'id, name, brand, type, price, status, size'),
-        fetchTable('stocks', undefined, false, undefined, 'id, product_id, store_id, quantity, initial_stock, status'),
-        fetchTable('stores', 'name', true, undefined, 'id, name, code, address, phone, mobile'),
-        fetchTable('brands', 'name', true, undefined, 'id, name'),
-        fetchTable('categories', 'name', true, undefined, 'id, name'),
-        fetchTable('customers', undefined, false, undefined, 'id, first_name, last_name, names, addresses, city, landmark, contact_number, discount_per_cylinder, notes'),
-        fetchOrdersOptimized(),
-        fetchTable('employees', 'name', true, undefined, 'id, assigned_store_ids, employee_number, name, type, salary, shift_start, shift_end, pin, loan_balance, loan_weekly_deduction, vale_balance, sss_loan_balance, sss_loan_weekly_deduction, loan_terms, loans, loan_balances'),
-        fetchTable('expenses', 'date', false, 100, 'id, store_id, payee, particulars, amount, date'),
-        fetchTable('stock_transfers', 'created_at', false, 50, 'id, from_store_id, to_store_id, items, returned_items, status, created_at, updated_at, initiated_by, accepted_by'),
-        fetchTable('users', undefined, false, undefined, 'id, username, password, role, assigned_store_ids, selected_store_id, access_rights'),
-        fetchTable('chat_messages', 'created_at', true, 50, 'id, sender_id, sender_name, recipient_id, content, is_read, created_at'),
-        fetchTable('app_settings', undefined, false, 1, 'id, logo_url'),
-        fetchTable('accounts_receivable', 'created_at', false, undefined, 'id, customer_id, order_id, original_amount, outstanding_amount, status, created_at, remarks'),
-        fetchTable('receivable_payments', 'paid_at', false, 100, 'id, receivable_id, amount, payment_method, paid_at'),
-        fetchTable('attendance', 'date', false, undefined, 'id, employee_id, date, time_in, time_out, late_minutes, undertime_minutes, overtime_minutes, is_half_day, status'),
-        fetchTable('payroll_history', 'generated_at', false, 20, 'id, period_start, period_end, generated_at, generated_by, total_disbursement, payroll_data'),
-        fetchTable('payroll_drafts', 'updated_at', false, undefined, 'id, store_id, period_start, period_end, adjustments, updated_at')
-      ]);
+      // STRICT SEQUENTIAL FETCHING to avoid "TypeError: Failed to fetch"
+      // This ensures we don't flood the browser's connection pool
+      
+      const pData = await fetchTable('products', 'name', true, undefined, 'id, name, brand, type, price, status, size');
+      const sData = await fetchTable('stocks', undefined, false, undefined, 'id, product_id, store_id, quantity, initial_stock, status');
+      const stData = await fetchTable('stores', 'name', true, undefined, 'id, name, code, address, phone, mobile');
+      const bData = await fetchTable('brands', 'name', true, undefined, 'id, name');
+      const cData = await fetchTable('categories', 'name', true, undefined, 'id, name');
+      const cuData = await fetchTable('customers', undefined, false, undefined, 'id, first_name, last_name, names, addresses, city, landmark, contact_number, discount_per_cylinder, notes');
+      const oData = await fetchOrdersOptimized();
+      const eData = await fetchTable('employees', 'name', true, undefined, 'id, assigned_store_ids, employee_number, name, type, salary, shift_start, shift_end, pin, loan_balance, loan_weekly_deduction, vale_balance, sss_loan_balance, sss_loan_weekly_deduction, loan_terms, loans, loan_balances');
+      const exData = await fetchTable('expenses', 'date', false, 100, 'id, store_id, payee, particulars, amount, date');
+      const tData = await fetchTable('stock_transfers', 'created_at', false, 50, 'id, from_store_id, to_store_id, items, returned_items, status, created_at, updated_at, initiated_by, accepted_by');
+      const uData = await fetchTable('users', undefined, false, undefined, 'id, username, password, role, assigned_store_ids, selected_store_id, access_rights');
+      const mData = await fetchTable('chat_messages', 'created_at', true, 50, 'id, sender_id, sender_name, recipient_id, content, is_read, created_at');
+      const seData = await fetchTable('app_settings', undefined, false, 1, 'id, logo_url');
+      const arData = await fetchTable('accounts_receivable', 'created_at', false, undefined, 'id, customer_id, order_id, original_amount, outstanding_amount, status, created_at, remarks');
+      const rpData = await fetchTable('receivable_payments', 'paid_at', false, 100, 'id, receivable_id, amount, payment_method, paid_at');
+      const atData = await fetchTable('attendance', 'date', false, undefined, 'id, employee_id, date, time_in, time_out, late_minutes, undertime_minutes, overtime_minutes, is_half_day, status');
+      const phData = await fetchTable('payroll_history', 'generated_at', false, 20, 'id, period_start, period_end, generated_at, generated_by, total_disbursement, payroll_data');
+      const pdData = await fetchTable('payroll_drafts', 'updated_at', false, undefined, 'id, store_id, period_start, period_end, adjustments, updated_at');
 
       if (pData) setProducts(pData.map((p:any) => ({ ...p, id: String(p.id).trim(), price: Number(p.price) || 0 })));
       if (sData) setStocks(sData.map((s:any) => ({ id: String(s.id).trim(), productId: String(s.product_id).trim(), storeId: String(s.store_id).trim(), quantity: Number(s.quantity) || 0, initialStock: Number(s.initial_stock) || 0, status: s.status || 'Active' })));
@@ -176,13 +184,13 @@ const App = () => {
       if (cuData) setCustomers(cuData.map((c:any) => ({ id: String(c.id).trim(), firstName: c.first_name || '', lastName: c.last_name || '', names: Array.isArray(c.names) ? c.names : [c.customer_name || 'Unknown'], addresses: Array.isArray(c.addresses) ? c.addresses : [String(c.address || '')], city: c.city || '', landmark: c.landmark || '', contactNumber: c.contact_number || '', discountPerCylinder: Number(c.discount_per_cylinder) || 0, notes: c.notes || '' })));
       if (oData) setOrders(oData.map((o:any) => ({ ...o, id: String(o.id).trim(), totalAmount: Number(o.total_amount ?? 0), totalDiscount: Number(o.total_discount ?? 0), receiptHtml: '' })));
       if (arData) setReceivables(arData.map((ar:any) => ({ id: String(ar.id).trim(), customerId: String(ar.customer_id).trim(), orderId: String(ar.order_id).trim(), originalAmount: Number(ar.original_amount), outstandingAmount: Number(ar.outstanding_amount), status: ar.status, createdAt: ar.created_at || ar.createdAt, remarks: ar.remarks || '' })));
-      if (rpData) setReceivablePayments(rpData.map((rp:any) => ({ id: String(rp.id).trim(), receivableId: String(rp.receivable_id).trim(), amount: Number(rp.amount), paymentMethod: rp.payment_method, paidAt: rp.paid_at })));
+      if (rpData) setReceivablePayments(rpData.map((rp:any) => ({ id: String(rp.id).trim(), receivable_id: String(rp.receivable_id).trim(), amount: Number(rp.amount), paymentMethod: rp.payment_method, paidAt: rp.paid_at })));
       if (eData) setEmployees(eData.map((e:any) => ({ id: String(e.id).trim(), assignedStoreIds: Array.isArray(e.assigned_store_ids) ? e.assigned_store_ids.map(id => String(id).trim()) : [String(e.store_id || '').trim()], employeeNumber: e.employee_number, name: e.name, type: e.type, salary: Number(e.salary) || 0, shift_start: e.shift_start || '08:00', shift_end: e.shift_end || '17:00', pin: e.pin || '', loanBalance: Number(e.loan_balance) || 0, loanWeeklyDeduction: Number(e.loan_weekly_deduction) || 0, valeBalance: Number(e.vale_balance) || 0, sssLoanBalance: Number(e.sss_loan_balance) || 0, sssLoanWeeklyDeduction: Number(e.sss_loan_weekly_deduction) || 0, loanTerms: e.loan_terms || '0', loans: e.loans || { salary: 0, sss: 0, vale: 0 }, loanBalances: e.loan_balances || { salary: 0, sss: 0, vale: 0 } })));
       if (atData) setAttendance(atData.map((a:any) => ({ id: String(a.id).trim(), employee_id: String(a.employee_id).trim(), date: a.date, time_in: a.time_in || '', time_out: a.time_out || '', late_minutes: Number(a.late_minutes) || 0, undertime_minutes: Number(a.undertime_minutes) || 0, overtime_minutes: Number(a.overtime_minutes) || 0, is_half_day: !!a.is_half_day, status: (a.status as AttendanceStatus) || 'REGULAR' })));
       if (phData) setPayrollHistory(phData.map((ph:any) => ({ id: ph.id, periodStart: ph.period_start, periodEnd: ph.period_end, generatedAt: ph.generated_at || ph.generatedAt, generatedBy: ph.generated_by || ph.generatedBy, totalDisbursement: Number(ph.total_disbursement), payroll_data: ph.payroll_data || [] })));
       if (pdData) setPayrollDrafts(pdData.map((pd:any) => ({ id: pd.id, storeId: pd.store_id, periodStart: pd.period_start, periodEnd: pd.period_end, adjustments: pd.adjustments || {}, updatedAt: pd.updated_at })));
       if (exData) setExpenses(exData.map((ex:any) => ({ ...ex, id: String(ex.id).trim(), storeId: String(ex.store_id).trim() })));
-      if (tData) setTransfers(tData.map((t:any) => ({ id: String(t.id).trim(), fromStoreId: String(t.from_store_id).trim(), toStoreId: String(t.to_store_id).trim(), items: Array.isArray(t.items) ? t.items : [], returnedItems: Array.isArray(t.returned_items) ? t.returned_items : [], status: t.status as TransferStatus, createdAt: t.created_at || new Date().toISOString(), updatedAt: t.updated_at || new Date().toISOString(), initiatedBy: t.initiatedBy || t.initiated_by, acceptedBy: t.acceptedBy || t.accepted_by })));
+      if (tData) setTransfers(tData.map((t:any) => ({ id: String(t.id).trim(), from_store_id: String(t.from_store_id).trim(), to_store_id: String(t.to_store_id).trim(), items: Array.isArray(t.items) ? t.items : [], returnedItems: Array.isArray(t.returned_items) ? t.returned_items : [], status: t.status as TransferStatus, createdAt: t.created_at || new Date().toISOString(), updatedAt: t.updated_at || new Date().toISOString(), initiatedBy: t.initiatedBy || t.initiated_by, acceptedBy: t.acceptedBy || t.accepted_by })));
       
       if (uData) {
         const mappedUsers = uData.map((u:any) => {
@@ -288,7 +296,6 @@ const App = () => {
         await supabase.from('orders').upsert(cleanData(ensureUnique(mappedOrders)), { onConflict: 'id' });
       }
       if (immediateStocks && immediateStocks.length > 0) {
-        // Fix: Changed s.store_id to s.storeId
         const mappedStocks = immediateStocks.map(s => ({ id: String(s.id).trim(), product_id: String(s.productId).trim(), store_id: String(s.storeId).trim(), quantity: Number(s.quantity) || 0, initial_stock: Number(s.initialStock) || 0, status: s.status || 'Active' }));
         await supabase.from('stocks').upsert(cleanData(ensureUnique(mappedStocks)), { onConflict: 'id' });
       }
@@ -350,7 +357,6 @@ const App = () => {
     setIsLoggingIn(true);
     setLoginError(null);
     try {
-      // 1. Superuser Hardcoded Bypass
       if (loginData.username.toLowerCase() === 'jhacace' && loginData.password === 'jhac1617') {
          const superUser: User = {
             id: 'superuser-jhacace',
@@ -366,7 +372,6 @@ const App = () => {
          return;
       }
 
-      // 2. Database Lookup
       const u = users.find(usr => usr.username.toLowerCase() === loginData.username.toLowerCase() && usr.password === loginData.password);
       if (u) {
         const isSuper = u.username.toLowerCase() === 'jhacace';

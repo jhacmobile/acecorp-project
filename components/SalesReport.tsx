@@ -135,7 +135,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
             end.setDate(start.getDate() + 6);
             return d >= start && d <= end;
         }
-        if (reportPeriod === 'monthly') return d.getMonth() && d.getFullYear() === anchor.getFullYear();
+        if (reportPeriod === 'monthly') return d.getMonth() === anchor.getMonth() && d.getFullYear() === anchor.getFullYear();
         return false;
     });
 
@@ -326,7 +326,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
          )}
       </div>
 
-      {/* SALES MANIFEST ROOT - ALWAYS TARGETS COMPLETE FILTERED DATA */}
+      {/* SALES MANIFEST ROOT - TARGETS FULL ARRAY FOR COMPLETE PRINTING */}
       <div id="audit-manifest-report-root" className={selectedOrder ? "hidden" : "hidden text-black font-sans"}>
           <div className="report-container">
              <div className="text-center mb-10 border-b-4 border-black pb-8">
@@ -461,7 +461,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                      <tbody className="divide-y divide-slate-50">
                         {auditMode === 'SALES' ? (
                           paginatedOrders.map(o => (
-                             <tr key={o.id} onClick={() => { setSelectedOrder(o); setShowOrderReceipt(false); setPrintCopyType('ALL'); }} className="hover:bg-slate-50/50 transition-colors cursor-pointer group"><td className="px-8 py-6 font-mono text-[10px] text-slate-600"><div className="font-bold text-slate-900">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div><div className="text-[8px] opacity-40">{toPHDateString(o.createdAt)}</div></td><td className="px-4 py-6"><span className="font-mono font-black text-[10px] text-sky-600">#{o.id.slice(-8)}</span></td><td className="px-8 py-6"><p className="text-[11px] font-black uppercase italic text-slate-900 leading-none">{o.customerName}</p></td><td className="px-4 py-6"><span className="text-[9px] font-bold text-slate-500 uppercase">{o.paymentMethod}</span></td><td className="px-4 py-6"><p className="text-[11px] font-black uppercase italic text-sky-600">{o.createdBy}</p></td><td className="px-6 py-6 text-center"><span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>{o.status}</span></td><td className="px-8 py-6 text-right"><span className="text-[14px] font-black italic text-slate-900">{formatCurrency(o.totalAmount)}</span></td></tr>
+                             <tr key={o.id} onClick={() => { setSelectedOrder(o); setShowOrderReceipt(false); setPrintCopyType('ALL'); }} className="hover:bg-slate-50/50 transition-colors cursor-pointer group"><td className="px-8 py-6 font-mono text-[10px] text-slate-600"><div className="font-bold text-slate-900">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div><div className="text-[8px] opacity-40">{toPHDateString(o.createdAt)}</div></td><td className="px-4 py-6"><span className="font-mono font-black text-[10px] text-sky-600">#{o.id.slice(-8)}</span></td><td className="px-8 py-6"><p className="text-[11px] font-black uppercase italic text-slate-900 leading-none">{o.customerName}</p></td><td className="px-4 py-6"><span className="text-[9px] font-bold text-slate-500 uppercase">{o.paymentMethod}</span></td><td className="px-4 py-6"><p className="text-[11px] font-black uppercase italic text-sky-600">{o.createdBy}</p></td><td className="px-6 py-6 text-center"><span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : o.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-500'}`}>{o.status}</span></td><td className="px-8 py-6 text-right"><span className="text-[14px] font-black italic text-slate-900">{formatCurrency(o.totalAmount)}</span></td></tr>
                           ))
                         ) : (
                           paginatedAR.map((item, i) => (

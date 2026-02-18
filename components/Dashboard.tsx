@@ -493,7 +493,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                            <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                               <div><label className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Customer Profile</label><p className="text-xs sm:text-[14px] font-black text-slate-800 uppercase italic">{selectedOrder.customerName}</p></div>
                               <div className="text-left sm:text-right">
-                                 {selectedOrder.riderName && (<div className="mb-2"><label className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Logistics</label><p className="text-[10px] sm:text-[12px] font-black text-sky-600 uppercase italic">{selectedOrder.riderName}</p></div>)}
+                                 {selectedOrder.riderName && (<div className="mb-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Logistics</label><p className="text-[10px] sm:text-[12px] font-black text-sky-600 uppercase italic">{selectedOrder.riderName}</p></div>)}
                                  <div><label className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Operator (User ID)</label><p className="text-[10px] sm:text-[12px] font-black text-slate-700 uppercase italic">{selectedOrder.createdBy}</p></div>
                               </div>
                            </div>

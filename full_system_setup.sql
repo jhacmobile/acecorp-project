@@ -1,6 +1,6 @@
 
--- ACECORP ENTERPRISE - MASTER SYSTEM INITIALIZATION (V2.0.0)
--- RUN THIS IN THE NEW SUPABASE PROJECT SQL EDITOR
+-- ACECORP ENTERPRISE - MASTER SYSTEM INITIALIZATION (V2.0.3)
+-- IDEMPOTENT SETUP SCRIPT
 
 BEGIN;
 
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS customers (
     id TEXT PRIMARY KEY,
     first_name TEXT,
     last_name TEXT,
-    names JSONB DEFAULT '[]', -- Legacy support
+    names JSONB DEFAULT '[]',
     addresses JSONB DEFAULT '[]',
     city TEXT,
     landmark TEXT,
@@ -103,6 +103,16 @@ CREATE TABLE IF NOT EXISTS attendance (
     overtime_minutes NUMERIC DEFAULT 0,
     is_half_day BOOLEAN DEFAULT FALSE,
     status TEXT DEFAULT 'REGULAR',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS expenses (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL,
+    payee TEXT,
+    particulars TEXT,
+    amount NUMERIC(12,2) DEFAULT 0,
+    date TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -185,7 +195,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     id TEXT PRIMARY KEY,
     sender_id TEXT NOT NULL,
     sender_name TEXT,
-    recipient_id TEXT NOT NULL, -- 'global' or user_id
+    recipient_id TEXT NOT NULL,
     content TEXT NOT NULL,
     is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -197,7 +207,6 @@ CREATE TABLE IF NOT EXISTS app_settings (
 );
 
 -- 3. SECURITY & PERFORMANCE
--- Disable RLS for System Synchronization Protocol
 DO $$
 DECLARE
     t TEXT;
@@ -207,25 +216,23 @@ BEGIN
     END LOOP;
 END $$;
 
--- Enable Realtime for critical tables
+-- Enable Realtime
 DROP PUBLICATION IF EXISTS supabase_realtime;
 CREATE PUBLICATION supabase_realtime FOR TABLE chat_messages, orders, stocks, stock_transfers;
 
--- Indices
-CREATE INDEX IF NOT EXISTS idx_stocks_lookup ON stocks(store_id, product_id);
-CREATE INDEX IF NOT EXISTS idx_orders_store_date ON orders(store_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_recipient ON chat_messages(recipient_id);
-CREATE INDEX IF NOT EXISTS idx_attendance_employee_date ON attendance(employee_id, date);
-
 -- 4. STORAGE SETUP
--- Create the bucket
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('assets', 'assets', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Storage Policies
+-- Storage Policies with Drop-First logic to prevent 42710 error
+DROP POLICY IF EXISTS "Public Read Access" ON storage.objects;
 CREATE POLICY "Public Read Access" ON storage.objects FOR SELECT USING (bucket_id = 'assets');
+
+DROP POLICY IF EXISTS "System Upload Access" ON storage.objects;
 CREATE POLICY "System Upload Access" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'assets');
+
+DROP POLICY IF EXISTS "System Update Access" ON storage.objects;
 CREATE POLICY "System Update Access" ON storage.objects FOR UPDATE USING (bucket_id = 'assets');
 
 COMMIT;
