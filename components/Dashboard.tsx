@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Order, Product, OrderStatus, Store, Stock, User, PaymentMethod, ReceivablePayment, AccountsReceivable } from '../types';
 import CustomDatePicker from './CustomDatePicker';
@@ -102,11 +101,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     setCurrentPage(1);
   }, [selectedStoreId, registryDate, reportPeriod, statusFilter, paymentFilter]);
 
-  const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ITEMS_PER_PAGE));
   const paginatedOrders = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    const safePage = Math.min(currentPage, totalPages);
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
     return filteredOrders.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredOrders, currentPage]);
+  }, [filteredOrders, currentPage, totalPages]);
 
   const arCollectionsList = useMemo(() => {
     const payments = receivablePayments.filter(rp => {
@@ -246,13 +246,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     );
   };
 
-  // SEQUENTIAL PRINT ENGINE: Cycles through copies for independent printer cuts
   const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
     if (type === 'ALL') {
       const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
       for (const copy of sequence) {
          setPrintCopyType(copy);
-         // Wait for DOM to stabilize with the specific copy type
          await new Promise(r => setTimeout(r, 300));
          window.print();
       }
@@ -274,7 +272,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           @page { size: portrait; margin: 10mm; }
           body * { visibility: hidden !important; }
           
-          /* Full manifest printing */
           #dashboard-all-orders-print-root, #dashboard-all-orders-print-root * { 
             visibility: visible !important; 
             display: block !important; 
@@ -287,7 +284,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             color: black !important; 
           }
 
-          /* Thermal specific print logic */
           #dashboard-thermal-print-root, #dashboard-thermal-print-root * { 
             visibility: visible !important; 
             display: block !important; 
@@ -315,7 +311,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
         }
       `}</style>
       
-      {/* FULL LEDGER PRINT ROOT (80MM OPTIMIZED) */}
       <div id="dashboard-all-orders-print-root" className="hidden">
          <div className="p-8 text-center border-b-2 border-black mb-8">
             <h1 className="text-2xl font-black uppercase italic">{activeStore?.name || 'ACECORP'}</h1>
@@ -348,11 +343,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
          </table>
       </div>
 
-      {/* THERMAL RECEIPT PRINT ROOT */}
       <div id="dashboard-thermal-print-root" className="hidden">
          {selectedOrder && (
            <div className="w-[80mm] bg-white">
-              {/* Isolated Copy Logic: Prevents merging layouts during sequence */}
               <div className="receipt-copy">
                 {generateReceiptPart(selectedOrder, `${printCopyType === 'ALL' ? 'CUSTOMER' : printCopyType} COPY`)}
               </div>
@@ -413,7 +406,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             </div>
          </div>
 
-         {/* Charts Grid */}
          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex flex-col h-[380px]">
                <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-6">Settlement Distribution</h3>
@@ -466,10 +458,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             </div>
          </div>
 
-         {/* Ledger Table - With Pagination */}
          <div className="bg-white rounded-[32px] sm:rounded-[48px] shadow-sm border border-slate-100 overflow-hidden flex flex-col min-h-[400px]">
             <div className="px-6 sm:px-10 py-4 sm:py-6 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center shrink-0 gap-4">
-               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Registry Manifest Ledger (Page {currentPage} of {totalPages || 1})</span>
+               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Registry Manifest Ledger (Page {currentPage} of {totalPages})</span>
                <button onClick={() => window.print()} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all"><i className="fas fa-print"></i> Print Full Registry</button>
             </div>
             <div className="flex-1 overflow-x-auto custom-scrollbar">
@@ -508,7 +499,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                </table>
             </div>
 
-            {/* Pagination Controls */}
             {totalPages > 1 && (
               <div className="px-10 py-6 border-t border-slate-50 flex items-center justify-between shrink-0 bg-white">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Showing {paginatedOrders.length} of {filteredOrders.length} records</span>
@@ -547,7 +537,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                   {showOrderReceipt ? (
                      <div className="bg-white p-4 sm:p-8 shadow-sm border border-slate-200 mx-auto w-full max-w-[320px] text-black">
                         <div className="receipt-container font-mono text-black text-center text-[10px] w-full pt-2">
-                           {/* Visual Preview shows all copies, but Sequential Engine prints individually */}
                            <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}</div>
                            <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'GATE PASS')}</div>
                            <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'STORE COPY')}</div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { User, Order, OrderStatus, Store, PaymentMethod, ReceivablePayment, AccountsReceivable } from '../types';
 import CustomDatePicker from './CustomDatePicker';
@@ -50,7 +49,6 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
   const [showOrderReceipt, setShowOrderReceipt] = useState(false);
   const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
   
-  // Pagination State - 25 items per turn
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 25;
 
@@ -64,13 +62,8 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     const anchor = new Date(date);
     let base = orders.filter(o => hasGlobalAccess || o.storeId === user.selectedStoreId);
 
-    if (statusFilter !== 'ALL') {
-      base = base.filter(o => o.status === statusFilter);
-    }
-
-    if (paymentFilter !== 'ALL') {
-      base = base.filter(o => o.paymentMethod === paymentFilter);
-    }
+    if (statusFilter !== 'ALL') base = base.filter(o => o.status === statusFilter);
+    if (paymentFilter !== 'ALL') base = base.filter(o => o.paymentMethod === paymentFilter);
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -84,9 +77,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
 
     if (reportPeriod === 'daily') {
       base = base.filter(o => toPHDateString(o.createdAt) === date);
-    } 
-    
-    else if (reportPeriod === 'weekly') {
+    } else if (reportPeriod === 'weekly') {
       const start = new Date(anchor);
       start.setDate(anchor.getDate() - anchor.getDay());
       const end = new Date(start);
@@ -95,9 +86,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
         const d = new Date(o.createdAt);
         return d >= start && d <= end;
       });
-    }
-
-    else if (reportPeriod === 'monthly') {
+    } else if (reportPeriod === 'monthly') {
       const year = anchor.getFullYear();
       const month = anchor.getMonth();
       base = base.filter(o => {
@@ -135,22 +124,25 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     }).filter(item => !!item.order).sort((a,b) => b.payment.paidAt.localeCompare(a.payment.paidAt));
   }, [receivablePayments, receivables, orders, date, reportPeriod, hasGlobalAccess, user.selectedStoreId]);
 
-  // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [date, reportPeriod, auditMode, statusFilter, paymentFilter, searchQuery]);
 
-  const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
-  const paginatedOrders = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredOrders.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredOrders, currentPage]);
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ITEMS_PER_PAGE));
+  const arTotalPages = Math.max(1, Math.ceil(arCollectionRegistry.length / ITEMS_PER_PAGE));
+  const currentTotalPages = auditMode === 'SALES' ? totalPages : arTotalPages;
 
-  const arTotalPages = Math.ceil(arCollectionRegistry.length / ITEMS_PER_PAGE);
+  const paginatedOrders = useMemo(() => {
+    const safePage = Math.min(currentPage, totalPages);
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    return filteredOrders.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredOrders, currentPage, totalPages]);
+
   const paginatedAR = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    const safePage = Math.min(currentPage, arTotalPages);
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
     return arCollectionRegistry.slice(start, start + ITEMS_PER_PAGE);
-  }, [arCollectionRegistry, currentPage]);
+  }, [arCollectionRegistry, currentPage, arTotalPages]);
 
   const stats = useMemo(() => {
     const revenueOrders = filteredOrders.filter(o => o.status === OrderStatus.ORDERED);
@@ -188,7 +180,6 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
           <div className="border-b border-black border-dashed my-2"></div>
           <div className="flex justify-between font-bold uppercase mb-1 text-[10px] text-black"><span>Method:</span> <span>{order.paymentMethod}</span></div>
           <div className="flex justify-between text-[14px] font-black italic uppercase text-black"><span>TOTAL:</span> <span>₱{formatCurrency(order.totalAmount).replace('₱','')}</span></div>
-          
           <div className="mt-6 pt-2 border-t border-black border-dashed text-center text-black space-y-2">
               <p className="font-black uppercase text-[10px]">Thank you for choosing AceCorp!</p>
               <div className="pt-6 pb-2">
@@ -196,21 +187,15 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   <p className="text-[9px] text-center font-black uppercase mt-1">CUSTOMER SIGNATURE</p>
               </div>
           </div>
-          <div className="mt-4 pt-2 border-t border-black border-dashed text-center text-black">
-              <p className="font-bold uppercase text-[9px]">OFFICIAL REGISTRY COPY</p>
-              <p className="font-bold uppercase text-[8px] mt-1">System Timestamp: {new Date().toLocaleTimeString()}</p>
-          </div>
        </div>
     );
   };
 
-  // SEQUENTIAL PRINT ENGINE: Mimics independent hardware cutting
   const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
     if (type === 'ALL') {
       const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
       for (const copy of sequence) {
          setPrintCopyType(copy);
-         // Settlement delay to ensure DOM update before print dialog capture
          await new Promise(r => setTimeout(r, 300));
          window.print();
       }
@@ -229,289 +214,318 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden text-slate-900 font-sans">
       <style>{`
         @media print {
-          @page { size: portrait; margin: 10mm; }
-          body * { visibility: hidden !important; }
-
-          /* Full Audit Manifest Print Override (Printed Once) */
-          #audit-manifest-report-root, #audit-manifest-report-root * { 
-            visibility: visible !important; 
-            display: block !important; 
-          }
-          #audit-manifest-report-root { 
-             position: absolute !important; 
-             left: 0; top: 0; 
-             width: 100% !important; 
-             background: white !important; 
-             color: black !important;
-          }
-
-          /* Thermal Receipt Logic (Sequential) */
-          #audit-thermal-print-root, #audit-thermal-print-root * { 
-            visibility: visible !important; 
-            display: block !important; 
-          }
-          #audit-thermal-print-root { 
-            position: absolute !important; 
-            left: 0 !important; 
-            top: 0 !important; 
-            width: 80mm !important; 
-            background: white !important; 
-          }
-          .receipt-copy { 
-             display: block !important;
-             page-break-after: always !important; 
-             break-after: page !important; 
-             width: 68mm !important;
-             margin: 0 auto !important;
-             overflow: hidden !important;
-             position: relative !important;
-          }
+          /* General Print Settings */
+          @page { size: portrait; margin: 15mm; }
           
-          .no-print { display: none !important; }
+          /* Force standard document scroll and visibility */
+          html, body { 
+            height: auto !important; 
+            overflow: visible !important; 
+            background: white !important;
+            color: black !important;
+            font-family: 'Inter', sans-serif;
+          }
+
+          /* Overcome App.tsx / Layout constraints */
+          #root, main, .flex-1, .h-screen, .overflow-hidden {
+            height: auto !important;
+            overflow: visible !important;
+            display: block !important;
+            min-height: 0 !important;
+          }
+
+          /* Hide UI elements */
+          .no-print, header, aside, .pagination-controls { 
+            display: none !important; 
+          }
+
+          /* Manifest Print Logic */
+          #audit-manifest-report-root {
+            display: block !important;
+            visibility: visible !important;
+            width: 100% !important;
+            position: relative !important;
+            top: 0 !important;
+            left: 0 !important;
+          }
+
+          #audit-manifest-report-root table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            table-layout: auto !important;
+            display: table !important;
+          }
+
+          #audit-manifest-report-root thead {
+            display: table-header-group !important;
+          }
+
+          #audit-manifest-report-root tr {
+            page-break-inside: avoid !important;
+            display: table-row !important;
+          }
+
+          #audit-manifest-report-root td, #audit-manifest-report-root th {
+            border-bottom: 1px solid #eee !important;
+          }
+
+          /* Thermal Print Logic */
+          #audit-thermal-print-root {
+            display: none !important; /* Only show when Reprinting specific thermal */
+          }
         }
       `}</style>
       
-      {/* FULL MANIFEST REPORT PRINT ROOT (A4/Portrait) */}
+      {/* PROFESSIONAL FULL MANIFEST PRINT (Multi-page optimized) */}
       <div id="audit-manifest-report-root" className="hidden">
-         <div className="text-center mb-8 border-b-2 border-black pb-4">
-            <h1 className="text-2xl font-black uppercase italic">{headerName}</h1>
-            <h2 className="text-sm font-black uppercase tracking-[0.3em] mt-2">Registry Audit Manifest</h2>
-            <p className="text-[10px] font-bold mt-1">Reference: {date} | Scope: {reportPeriod.toUpperCase()} | Focus: {auditMode}</p>
+         <div className="text-center mb-10 border-b-4 border-slate-950 pb-6">
+            <h1 className="text-3xl font-black uppercase italic tracking-tighter">{headerName}</h1>
+            <h2 className="text-sm font-bold uppercase tracking-[0.4em] text-slate-500 mt-2">Registry Audit Manifest • Full Document</h2>
+            <div className="flex justify-center gap-10 mt-4 text-[10px] font-black uppercase">
+               <p>Reference: {date}</p>
+               <p>Interval: {reportPeriod}</p>
+               <p>Operator: {user.username}</p>
+            </div>
          </div>
 
          {auditMode === 'SALES' ? (
-           <table className="w-full text-left border-collapse">
+           <table className="w-full text-left">
               <thead>
-                 <tr className="border-b-2 border-black text-[9px] font-black uppercase">
-                    <th className="py-2">Timestamp</th>
-                    <th className="py-2">Ticket #</th>
-                    <th className="py-2">Entity Profile</th>
-                    <th className="py-2">Method</th>
-                    <th className="py-2">Operator</th>
-                    <th className="py-2 text-center">Status</th>
-                    <th className="py-2 text-right">Settlement</th>
+                 <tr className="border-b-2 border-slate-900 text-[10px] font-black uppercase">
+                    <th className="py-4 px-2">Timestamp</th>
+                    <th className="py-4 px-2">Ticket #</th>
+                    <th className="py-4 px-2">Entity Profile</th>
+                    <th className="py-4 px-2">Method</th>
+                    <th className="py-4 px-2 text-center">Status</th>
+                    <th className="py-4 px-2 text-right">Settlement</th>
                  </tr>
               </thead>
-              <tbody className="text-[9px] font-bold uppercase italic">
+              <tbody className="text-[10px] font-bold uppercase">
                  {filteredOrders.map(o => (
-                    <tr key={o.id} className="border-b border-black border-dotted">
-                       <td className="py-3">{toPHDateString(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
-                       <td className="py-3">#{o.id.slice(-8)}</td>
-                       <td className="py-3">{o.customerName}</td>
-                       <td className="py-3">{o.paymentMethod}</td>
-                       <td className="py-3">{o.createdBy}</td>
-                       <td className="py-3 text-center">{o.status}</td>
-                       <td className="py-3 text-right">{formatCurrency(o.totalAmount)}</td>
+                    <tr key={o.id} className="border-b border-slate-100">
+                       <td className="py-3 px-2">{toPHDateString(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                       <td className="py-3 px-2">#{o.id.slice(-8)}</td>
+                       <td className="py-3 px-2">{o.customerName}</td>
+                       <td className="py-3 px-2">{o.paymentMethod}</td>
+                       <td className="py-3 px-2 text-center">{o.status}</td>
+                       <td className="py-3 px-2 text-right">{formatCurrency(o.totalAmount)}</td>
                     </tr>
                  ))}
               </tbody>
            </table>
          ) : (
-           <table className="w-full text-left border-collapse">
+           <table className="w-full text-left">
               <thead>
-                 <tr className="border-b-2 border-black text-[9px] font-black uppercase">
-                    <th className="py-2">Timestamp</th>
-                    <th className="py-2">PAY #</th>
-                    <th className="py-2">Customer Profile</th>
-                    <th className="py-2">Method</th>
-                    <th className="py-2 text-right">Amount</th>
+                 <tr className="border-b-2 border-slate-900 text-[10px] font-black uppercase">
+                    <th className="py-4 px-2">Timestamp</th>
+                    <th className="py-4 px-2">PAY #</th>
+                    <th className="py-4 px-2">Customer Profile</th>
+                    <th className="py-4 px-2">Method</th>
+                    <th className="py-4 px-2 text-right">Amount</th>
                  </tr>
               </thead>
-              <tbody className="text-[10px] font-bold uppercase italic">
+              <tbody className="text-[10px] font-bold uppercase">
                  {arCollectionRegistry.map((item, i) => (
-                    <tr key={i} className="border-b border-black border-dotted">
-                       <td className="py-3">{toPHDateString(item.payment.paidAt)}</td>
-                       <td className="py-3">PAY-{item.payment.id.slice(-4)}</td>
-                       <td className="py-3">{item.order?.customerName}</td>
-                       <td className="py-3">{item.payment.paymentMethod}</td>
-                       <td className="py-3 text-right">{formatCurrency(item.payment.amount)}</td>
+                    <tr key={i} className="border-b border-slate-100">
+                       <td className="py-3 px-2">{toPHDateString(item.payment.paidAt)}</td>
+                       <td className="py-3 px-2">PAY-{item.payment.id.slice(-4)}</td>
+                       <td className="py-3 px-2">{item.order?.customerName}</td>
+                       <td className="py-3 px-2">{item.payment.paymentMethod}</td>
+                       <td className="py-3 px-2 text-right">{formatCurrency(item.payment.amount)}</td>
                     </tr>
                  ))}
               </tbody>
            </table>
          )}
 
-         <div className="mt-10 pt-4 border-t-2 border-black flex justify-between items-baseline">
-            <div className="text-[9px] font-black uppercase">
-               <p>Audit Total Inflow: {formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</p>
-               <p>Generated by: {user.username}</p>
+         <div className="mt-12 pt-6 border-t-2 border-slate-200 flex justify-between items-baseline">
+            <div className="text-[11px] font-black uppercase">
+               <p className="text-slate-500">Aggregate Audit Summary</p>
+               <p className="text-xl mt-1">Total Inflow: {formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</p>
             </div>
-            <p className="text-[8px] font-bold uppercase">System Lock: {new Date().toLocaleString()}</p>
+            <p className="text-[8px] font-bold text-slate-400 uppercase">System Integrity Lock: {new Date().toLocaleString()}</p>
          </div>
       </div>
 
-      {/* THERMAL PRINT ROOT (Sequential isolated copy) */}
-      <div id="audit-thermal-print-root" className={selectedOrder ? "block" : "hidden"}>
-         {selectedOrder && (
-           <div className="w-[80mm] bg-white">
-              <div className="receipt-copy">
-                {generateReceiptPart(selectedOrder, `${printCopyType === 'ALL' ? 'CUSTOMER' : printCopyType} COPY`)}
-              </div>
-           </div>
-         )}
-      </div>
-
-      <div className="px-8 py-5 bg-[#050810] text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 gap-4 sm:gap-0 no-print">
+      {/* HEADER SUMMARY SECTION */}
+      <div className="px-8 py-6 bg-slate-950 text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 no-print">
          <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-12 relative z-10 w-full sm:w-auto">
-            <div className="shrink-0">
-               <p className="text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1 leading-none">Actual Cash Inflow</p>
-               <h2 className="text-xl sm:text-3xl font-black italic tracking-tighter text-[#38bdf8] leading-none">{formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</h2>
+            <div className="shrink-0 border-l-4 border-sky-500 pl-6">
+               <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1 leading-none">Net System Inflow</p>
+               <h2 className="text-3xl font-black italic tracking-tighter text-white leading-none">{formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</h2>
             </div>
-            <div className="hidden sm:block h-12 w-px bg-white/10 mx-4"></div>
-            <div className="flex flex-wrap gap-4 sm:gap-8 overflow-x-auto no-scrollbar items-center">
-               <div className="shrink-0"><p className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-[0.1em] mb-1.5 leading-none">Total Booked Revenue</p><p className="text-xs sm:text-lg font-black italic tracking-tight text-white leading-none">{formatCurrency(stats.totalSales + stats.newARGenerated)}</p></div>
-               <div className="shrink-0"><p className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-[0.1em] mb-1.5 leading-none">AR Collected</p><p className="text-xs sm:text-lg font-black italic tracking-tight text-[#10b981] leading-none">{formatCurrency(stats.arCollectionsTotal)}</p></div>
-               <div className="shrink-0"><p className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-[0.1em] mb-1.5 leading-none">NEW AR GENERATED</p><p className="text-xs sm:text-lg font-black italic tracking-tight text-[#f59e0b] leading-none">{formatCurrency(stats.newARGenerated)}</p></div>
-               <div className="h-8 w-px bg-white/5 mx-2"></div>
-               {Object.entries(stats.paymentBreakdown).map(([method, amount]) => (
-                  <div key={method} className="shrink-0">
-                     <p className="text-[7px] sm:text-[8px] font-black text-slate-500 uppercase tracking-[0.1em] mb-1.5 leading-none">{method}</p>
-                     <p className="text-xs sm:text-lg font-black italic text-white leading-none">{formatCurrency(amount as number)}</p>
-                  </div>
-               ))}
+            <div className="flex flex-wrap gap-8 overflow-x-auto no-scrollbar items-center">
+               <div className="shrink-0">
+                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none">Booked Revenue</p>
+                  <p className="text-lg font-black italic tracking-tight text-white leading-none">{formatCurrency(stats.totalSales + stats.newARGenerated)}</p>
+               </div>
+               <div className="shrink-0">
+                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none">AR Collections</p>
+                  <p className="text-lg font-black italic tracking-tight text-emerald-400 leading-none">{formatCurrency(stats.arCollectionsTotal)}</p>
+               </div>
+               <div className="hidden sm:flex gap-6 border-l border-white/10 pl-6">
+                  {Object.entries(stats.paymentBreakdown).filter(([_,v]) => v > 0).slice(0, 3).map(([method, amount]) => (
+                    <div key={method} className="shrink-0">
+                       <p className="text-[7px] font-black text-slate-600 uppercase mb-1 leading-none">{method}</p>
+                       <p className="text-xs font-black italic text-slate-300 leading-none">{formatCurrency(amount as number)}</p>
+                    </div>
+                  ))}
+               </div>
             </div>
+         </div>
+         <div className="flex items-center gap-4 no-print">
+            <button onClick={() => window.print()} className="px-6 py-3 bg-white text-slate-950 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center gap-2 hover:bg-sky-50 transition-all active:scale-95"><i className="fas fa-print"></i> Generate Full Report</button>
          </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden min-h-0 no-print">
-         <aside className="w-[280px] bg-white border-r border-slate-200 flex flex-col h-full shrink-0">
-            <div className="p-8 space-y-10">
-               <div><h1 className="text-xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">{headerName}</h1><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Audit Ledger Interface</p></div>
-               <div className="space-y-8">
-                  <div className="space-y-3">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Audit Focus</label>
-                     <div className="flex flex-col gap-2 p-1.5 bg-slate-50 rounded-2xl border border-slate-100">
-                        <button onClick={() => setAuditMode('SALES')} className={`w-full py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${auditMode === 'SALES' ? 'bg-[#0f172a] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Sales Registry</button>
-                        <button onClick={() => setAuditMode('AR_COLLECTION')} className={`w-full py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${auditMode === 'AR_COLLECTION' ? 'bg-[#0f172a] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>AR Collections</button>
+      <div className="flex-1 flex overflow-hidden no-print">
+         <aside className="w-[300px] bg-white border-r border-slate-200 flex flex-col h-full shrink-0">
+            <div className="p-10 space-y-12">
+               <div>
+                  <h1 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">{headerName}</h1>
+                  <p className="text-[9px] font-bold text-sky-600 uppercase tracking-[0.2em] mt-2">Professional Audit Desk</p>
+               </div>
+               
+               <div className="space-y-10">
+                  <div className="space-y-4">
+                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Audit Target</label>
+                     <div className="grid grid-cols-1 gap-2 p-1.5 bg-slate-50 rounded-[24px] border border-slate-100">
+                        <button onClick={() => setAuditMode('SALES')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'SALES' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>Sales Registry</button>
+                        <button onClick={() => setAuditMode('AR_COLLECTION')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'AR_COLLECTION' ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>AR Collections</button>
                      </div>
                   </div>
-                  <div className="space-y-3"><label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Reference Date</label><CustomDatePicker value={date} onChange={setDate} className="w-full" /></div>
-                  <div className="space-y-3 p-6 bg-slate-50 rounded-[32px] border border-slate-100"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Registry Type</label><div className="flex gap-2 p-1 bg-white rounded-xl shadow-sm">{(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (<button key={p} onClick={() => setReportPeriod(p)} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${reportPeriod === p ? 'bg-[#2d89c8] text-white shadow-md' : 'text-slate-400'}`}>{p}</button>))}</div></div>
-                  <button onClick={() => window.print()} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-[9px] shadow-xl flex items-center justify-center gap-2 hover:bg-slate-800 transition-all"><i className="fas fa-print"></i> Full Audit Report</button>
+
+                  <div className="space-y-4"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Reference Date</label><CustomDatePicker value={date} onChange={setDate} className="w-full shadow-sm" /></div>
+                  
+                  <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 space-y-4">
+                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Time Scope</label>
+                     <div className="flex gap-2 p-1 bg-white rounded-xl">
+                        {(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (
+                          <button key={p} onClick={() => setReportPeriod(p)} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase transition-all ${reportPeriod === p ? 'bg-sky-600 text-white shadow-md' : 'text-slate-400'}`}>{p}</button>
+                        ))}
+                     </div>
+                  </div>
                </div>
             </div>
          </aside>
 
-         <div className="flex-1 flex flex-col bg-white">
-            <div className="p-8 border-b flex justify-between items-center bg-white shrink-0 no-print">
-               <div className="relative w-full max-w-xl group">
+         <div className="flex-1 flex flex-col bg-white overflow-hidden">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+               <div className="relative w-full max-w-xl">
                   <i className="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-300"></i>
-                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search Ledger..." className="w-full pl-12 pr-12 py-3.5 bg-slate-50 border border-slate-100 rounded-[24px] text-xs font-bold shadow-inner outline-none focus:bg-white focus:border-sky-400 transition-all text-slate-900 uppercase" />
+                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search Audit Trails..." className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-100 rounded-[28px] text-[11px] font-bold uppercase outline-none focus:bg-white focus:border-sky-400 transition-all shadow-inner" />
                </div>
-               <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    Page {currentPage} of {auditMode === 'SALES' ? totalPages || 1 : arTotalPages || 1}
-                  </span>
+               <div className="flex items-center gap-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  Page <span className="text-slate-950">{currentPage}</span> of {currentTotalPages}
                </div>
             </div>
-            <div className="flex-1 overflow-x-auto custom-scrollbar p-8 flex flex-col">
-               <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden min-w-[900px] flex-1">
-                  <table className="w-full text-left">
-                     <thead className="bg-slate-50 text-[9px] text-slate-400 font-black uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 shadow-sm"><tr><th className="px-8 py-6">Timestamp</th><th className="px-4 py-6 text-sky-600">Ticket #</th><th className="px-8 py-6">Entity Profile</th><th className="px-4 py-6">Method</th><th className="px-4 py-6">Operator</th><th className="px-6 py-6 text-center">Status</th><th className="px-8 py-6 text-right">Value</th></tr></thead>
-                     <tbody className="divide-y divide-slate-50">
-                        {auditMode === 'SALES' ? (
-                          paginatedOrders.length === 0 ? (
-                            <tr><td colSpan={7} className="px-10 py-20 text-center text-slate-300 font-black uppercase italic tracking-widest opacity-40">Empty sales registry in this window</td></tr>
-                          ) : (
-                            paginatedOrders.map(o => (
-                               <tr key={o.id} onClick={() => { setSelectedOrder(o); setShowOrderReceipt(false); setPrintCopyType('ALL'); }} className="hover:bg-slate-50/50 transition-colors cursor-pointer group"><td className="px-8 py-6 font-mono text-[10px] text-slate-600"><div className="font-bold text-slate-900">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div><div className="text-[8px] opacity-40">{toPHDateString(o.createdAt)}</div></td><td className="px-4 py-6"><span className="font-mono font-black text-[10px] text-sky-600">#{o.id.slice(-8)}</span></td><td className="px-8 py-6"><p className="text-[11px] font-black uppercase italic text-slate-900 leading-none">{o.customerName}</p></td><td className="px-4 py-6"><span className="text-[9px] font-bold text-slate-500 uppercase">{o.paymentMethod}</span></td><td className="px-4 py-6"><p className="text-[11px] font-black uppercase italic text-sky-600">{o.createdBy}</p></td><td className="px-6 py-6 text-center"><span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : o.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-500'}`}>{o.status}</span></td><td className="px-8 py-6 text-right"><span className="text-[14px] font-black italic text-slate-900">{formatCurrency(o.totalAmount)}</span></td></tr>
-                            ))
-                          )
-                        ) : (
-                          paginatedAR.length === 0 ? (
-                            <tr><td colSpan={7} className="px-10 py-20 text-center text-slate-300 font-black uppercase italic tracking-widest opacity-40">No collections registered in window</td></tr>
-                          ) : (
-                            paginatedAR.map((item, i) => (
-                               <tr key={i} className="hover:bg-slate-50/50 transition-colors group"><td className="px-8 py-6 text-[10px] font-bold text-slate-900">{new Date(item.payment.paidAt).toLocaleDateString()}</td><td className="px-4 py-6"><span className="font-mono font-black text-sky-600">PAY-{item.payment.id.slice(-4)}</span></td><td className="px-8 py-6 font-black uppercase italic text-slate-800 text-[11px]">{item.order?.customerName}</td><td className="px-4 py-6 text-[10px] font-bold text-slate-500">{item.payment.paymentMethod}</td><td colSpan={2} className="px-6 py-6 text-center"><span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100">COLLECTED</span></td><td className="px-8 py-6 text-right font-black italic text-emerald-700">{formatCurrency(item.payment.amount)}</td></tr>
-                            ))
-                          )
-                        )}
-                     </tbody>
-                  </table>
-               </div>
-               
-               {/* Pagination Controls */}
-               {((auditMode === 'SALES' && totalPages > 1) || (auditMode === 'AR_COLLECTION' && arTotalPages > 1)) && (
-                 <div className="mt-8 flex items-center justify-between shrink-0 bg-white px-4">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      Showing Page {currentPage} of {auditMode === 'SALES' ? totalPages : arTotalPages}
-                    </span>
-                    <div className="flex gap-2">
-                      <button 
-                        disabled={currentPage === 1}
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        className="px-6 py-2.5 bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        Previous
-                      </button>
-                      <button 
-                        disabled={currentPage === (auditMode === 'SALES' ? totalPages : arTotalPages)}
-                        onClick={() => setCurrentPage(prev => Math.min(auditMode === 'SALES' ? totalPages : arTotalPages, prev + 1))}
-                        className="px-6 py-2.5 bg-slate-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        Next
-                      </button>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-10 bg-slate-50/30">
+               <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 overflow-hidden flex flex-col h-full min-w-[900px]">
+                  <div className="flex-1 overflow-y-auto custom-scrollbar">
+                     <table className="w-full text-left">
+                        <thead className="bg-slate-50 text-[10px] text-slate-400 font-black uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 shadow-sm">
+                           <tr>
+                              <th className="px-10 py-6">Timestamp</th>
+                              <th className="px-4 py-6 text-sky-600">Ticket #</th>
+                              <th className="px-10 py-6">Customer / Entity</th>
+                              <th className="px-4 py-6">Method</th>
+                              <th className="px-4 py-6">Op</th>
+                              <th className="px-6 py-6 text-center">Status</th>
+                              <th className="px-10 py-6 text-right">Value</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                           {auditMode === 'SALES' ? (
+                             paginatedOrders.map(o => (
+                                <tr key={o.id} onClick={() => { setSelectedOrder(o); setShowOrderReceipt(false); setPrintCopyType('ALL'); }} className="hover:bg-sky-50/50 transition-colors cursor-pointer group">
+                                   <td className="px-10 py-6 font-mono text-[10px]">
+                                      <div className="font-bold text-slate-900">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                                      <div className="text-[8px] opacity-40 uppercase">{toPHDateString(o.createdAt)}</div>
+                                   </td>
+                                   <td className="px-4 py-6"><span className="font-mono font-black text-[10px] text-sky-600">#{o.id.slice(-8)}</span></td>
+                                   <td className="px-10 py-6"><p className="text-[12px] font-black uppercase italic text-slate-900 leading-none">{o.customerName}</p></td>
+                                   <td className="px-4 py-6"><span className="text-[9px] font-bold text-slate-500 uppercase">{o.paymentMethod}</span></td>
+                                   <td className="px-4 py-6"><p className="text-[10px] font-black text-sky-600 uppercase italic leading-none">{o.createdBy}</p></td>
+                                   <td className="px-6 py-6 text-center"><span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>{o.status}</span></td>
+                                   <td className="px-10 py-6 text-right"><span className="text-[15px] font-black italic text-slate-950">{formatCurrency(o.totalAmount)}</span></td>
+                                </tr>
+                             ))
+                           ) : (
+                             paginatedAR.map((item, i) => (
+                                <tr key={i} className="hover:bg-emerald-50/50 transition-colors group">
+                                   <td className="px-10 py-6 text-[10px] font-bold text-slate-900">{new Date(item.payment.paidAt).toLocaleDateString()}</td>
+                                   <td className="px-4 py-6"><span className="font-mono font-black text-sky-600">PAY-{item.payment.id.slice(-4)}</span></td>
+                                   <td className="px-10 py-6 font-black uppercase italic text-slate-800 text-[12px]">{item.order?.customerName}</td>
+                                   <td className="px-4 py-6 text-[10px] font-bold text-slate-500">{item.payment.paymentMethod}</td>
+                                   <td colSpan={2} className="px-6 py-6 text-center"><span className="px-3 py-1 rounded-lg text-[8px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100">COLLECTED</span></td>
+                                   <td className="px-10 py-6 text-right font-black italic text-emerald-700 text-base">{formatCurrency(item.payment.amount)}</td>
+                                </tr>
+                             ))
+                           )}
+                        </tbody>
+                     </table>
+                  </div>
+                  
+                  {/* PAGINATION CONTROLS */}
+                  {currentTotalPages > 1 && (
+                    <div className="px-10 py-8 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0 pagination-controls">
+                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Displaying page {currentPage} turns</p>
+                       <div className="flex gap-4">
+                          <button disabled={currentPage === 1} onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} className="px-8 py-3 bg-white text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 hover:bg-sky-50 transition-all disabled:opacity-20">Previous Turn</button>
+                          <button disabled={currentPage === currentTotalPages} onClick={() => setCurrentPage(prev => Math.min(currentTotalPages, prev + 1))} className="px-8 py-3 bg-slate-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-all disabled:opacity-20">Next Turn</button>
+                       </div>
                     </div>
-                 </div>
-               )}
+                  )}
+               </div>
             </div>
          </div>
       </div>
 
       {selectedOrder && (
-         <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 md:p-6 bg-slate-950/80 backdrop-blur-md animate-in zoom-in duration-300 no-print" onClick={() => setSelectedOrder(null)}>
-            <div className="bg-[#f8fafc] w-full max-w-[500px] rounded-[56px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
-               <div className="p-8 border-b border-slate-100 bg-white flex justify-between items-center shrink-0">
-                  <div className="flex items-center gap-4"><h3 className="text-xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">{showOrderReceipt ? 'Manifest Mirror' : 'Order Detail'}</h3><button onClick={() => setShowOrderReceipt(!showOrderReceipt)} className="px-3 py-1 bg-sky-50 text-sky-600 rounded-lg text-[9px] font-black mt-2 uppercase">{showOrderReceipt ? 'View Audit' : 'View Receipt'}</button></div>
-                  <button onClick={() => setSelectedOrder(null)} className="text-slate-400 hover:text-red-500 transition-colors"><i className="fas fa-times-circle text-3xl"></i></button>
+         <div className="fixed inset-0 z-[5000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md animate-in zoom-in duration-300 no-print" onClick={() => setSelectedOrder(null)}>
+            <div className="bg-white w-full max-w-[500px] rounded-[56px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
+               <div className="p-10 border-b border-slate-100 bg-white flex justify-between items-center shrink-0">
+                  <div className="flex items-center gap-6">
+                    <h3 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">{showOrderReceipt ? 'Manifest Mirror' : 'Order Detail'}</h3>
+                  </div>
+                  <button onClick={() => setSelectedOrder(null)} className="text-slate-300 hover:text-red-500 transition-colors"><i className="fas fa-times-circle text-3xl"></i></button>
                </div>
-               <div className="flex-1 overflow-y-auto p-10 custom-scrollbar bg-slate-50/20">
+               <div className="flex-1 overflow-y-auto p-10 custom-scrollbar bg-slate-50/30">
                   {showOrderReceipt ? (
-                    <div className="bg-white p-6 shadow-sm border border-slate-200 mx-auto w-full max-w-[320px] text-black">
-                        <div className="receipt-container font-mono text-black text-center text-[10px] w-full pt-2">
-                           {/* Visual Preview shows all copies, but Sequential Engine prints individually */}
-                           <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}</div>
-                           <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'GATE PASS')}</div>
-                           <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'STORE COPY')}</div>
-                        </div>
+                    <div className="bg-white p-10 shadow-xl border border-slate-200 mx-auto w-full max-w-[320px] text-black">
+                        {generateReceiptPart(selectedOrder, 'REPRINT COPY')}
                     </div>
                   ) : (
-                    <div className="space-y-6 text-slate-800">
-                        <div className="p-6 bg-white rounded-3xl border border-slate-100 space-y-4 shadow-sm">
-                           <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                              <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Personnel Profile</label><p className="text-[14px] font-black text-slate-800 uppercase italic">{selectedOrder.customerName}</p></div>
-                              <div className="text-left sm:text-right">
-                                 {selectedOrder.riderName && (<div className="mb-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Logistics</label><p className="text-[12px] font-black text-sky-600 uppercase italic">{selectedOrder.riderName}</p></div>)}
-                                 <div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Operator (User ID)</label><p className="text-[12px] font-black text-slate-700 uppercase italic">{selectedOrder.createdBy}</p></div>
+                    <div className="space-y-8">
+                        <div className="p-8 bg-white rounded-[32px] border border-slate-100 space-y-4 shadow-sm">
+                           <div className="flex justify-between items-start">
+                              <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer Entity</label><p className="text-[16px] font-black text-slate-950 uppercase italic leading-tight mt-1">{selectedOrder.customerName}</p></div>
+                              <div className="text-right">
+                                 <div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Operator</label><p className="text-[12px] font-black text-sky-600 uppercase italic mt-1">{selectedOrder.createdBy}</p></div>
                               </div>
                            </div>
-                           <div className="pt-2 border-t border-slate-50 flex justify-between items-center"><div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Settlement Method</label><p className="text-[11px] font-black text-emerald-600 uppercase italic">{selectedOrder.paymentMethod}</p></div><span className={`px-2 py-1 rounded text-[7px] sm:text-[8px] font-black uppercase tracking-widest border ${selectedOrder.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : selectedOrder.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-500'}`}>{selectedOrder.status}</span></div>
+                           <div className="pt-4 border-t border-slate-50 flex justify-between items-center">
+                              <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Settlement</label><p className="text-[13px] font-black text-emerald-600 uppercase italic">{selectedOrder.paymentMethod}</p></div>
+                              <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase border ${selectedOrder.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-400'}`}>{selectedOrder.status}</span>
+                           </div>
                         </div>
-                        <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden text-gray-900 font-bold">
+                        <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden font-bold">
                            <table className="w-full text-left">
-                              <thead className="bg-slate-50/50 border-b border-slate-100"><tr className="text-[9px] font-black text-slate-400 uppercase"><th className="px-8 py-4">Asset Detail</th><th className="px-8 py-4 text-right">Value</th></tr></thead>
-                              <tbody className="divide-y divide-slate-100">{selectedOrder.items.map((item, idx) => (<tr key={idx}><td className="px-8 py-4"><span className="text-[12px] font-black uppercase italic text-slate-800">{item.productName} (x{item.qty})</span></td><td className="px-8 py-4 text-right text-[12px] font-black italic text-slate-900">₱{formatCurrency(item.total).replace('₱','')}</td></tr>))}</tbody>
+                              <thead className="bg-slate-50 border-b border-slate-100"><tr className="text-[9px] font-black text-slate-400 uppercase"><th className="px-8 py-4">Registry Asset</th><th className="px-8 py-4 text-right">Value</th></tr></thead>
+                              <tbody className="divide-y divide-slate-100">{selectedOrder.items.map((item, idx) => (<tr key={idx}><td className="px-8 py-5 text-[12px] font-black uppercase italic text-slate-800">{item.productName} (x{item.qty})</td><td className="px-8 py-5 text-right text-[12px] font-black italic text-slate-950">₱{formatCurrency(item.total).replace('₱','')}</td></tr>))}</tbody>
                            </table>
                         </div>
-                        <div className="p-6 bg-slate-950 rounded-[32px] flex justify-between items-center text-white shadow-2xl mt-4"><span className="text-[9px] font-black uppercase italic opacity-50">Registry Settlement</span><span className="text-2xl font-black italic">{formatCurrency(selectedOrder.totalAmount)}</span></div>
+                        <div className="p-8 bg-slate-950 rounded-[40px] flex justify-between items-center text-white shadow-2xl"><span className="text-[10px] font-black uppercase italic opacity-50">Settlement Total</span><span className="text-3xl font-black italic">{formatCurrency(selectedOrder.totalAmount)}</span></div>
                     </div>
                   )}
                </div>
-               <div className="p-8 border-t bg-white flex flex-col gap-3 shrink-0">
-                  {showOrderReceipt ? (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-4 gap-2">
-                         <button onClick={() => handlePrintRequest('CUSTOMER')} className={`py-2.5 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'CUSTOMER' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Cust</button>
-                         <button onClick={() => handlePrintRequest('GATE')} className={`py-2.5 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'GATE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Gate</button>
-                         <button onClick={() => handlePrintRequest('STORE')} className={`py-2.5 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'STORE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Store</button>
-                         <button onClick={() => handlePrintRequest('ALL')} className={`py-2.5 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'ALL' ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-900 border-slate-200'}`}>ALL</button>
-                      </div>
-                      <button onClick={() => handlePrintRequest(printCopyType)} className="w-full py-4 bg-sky-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95"><i className="fas fa-print"></i> Authorize Print</button>
-                    </div>
-                  ) : (
-                    <button onClick={() => { setShowOrderReceipt(true); setPrintCopyType('ALL'); }} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[10px] shadow-xl">Reprint Manifest</button>
-                  )}
-                  <button onClick={() => setSelectedOrder(null)} className="w-full py-4 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all">Dismiss</button>
+               <div className="p-10 border-t bg-white flex flex-col gap-4 shrink-0">
+                  <div className="grid grid-cols-2 gap-4">
+                    <button onClick={() => { setShowOrderReceipt(!showOrderReceipt); }} className="py-5 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-[10px] hover:bg-slate-200 transition-all">{showOrderReceipt ? 'View Audit Data' : 'View Thermal Mirror'}</button>
+                    <button onClick={() => handlePrintRequest('ALL')} className="py-5 bg-sky-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95"><i className="fas fa-print"></i> Authorize Reprint</button>
+                  </div>
+                  <button onClick={() => setSelectedOrder(null)} className="w-full py-4 text-slate-400 font-black uppercase text-[10px] active:scale-95">Close Viewport</button>
                </div>
             </div>
          </div>
