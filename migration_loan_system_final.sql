@@ -1,0 +1,28 @@
+
+-- ACEGAS ENTERPRISE - LOAN & ATTENDANCE SYSTEM FINAL INTEGRITY MIGRATION
+-- Run this in your Supabase SQL Editor
+
+ALTER TABLE IF EXISTS employees 
+ADD COLUMN IF NOT EXISTS loan_balance NUMERIC DEFAULT 0,
+ADD COLUMN IF NOT EXISTS vale_balance NUMERIC DEFAULT 0,
+ADD COLUMN IF NOT EXISTS sss_loan_balance NUMERIC DEFAULT 0,
+ADD COLUMN IF NOT EXISTS loan_weekly_deduction NUMERIC DEFAULT 0,
+ADD COLUMN IF NOT EXISTS sss_loan_weekly_deduction NUMERIC DEFAULT 0;
+
+-- Ensure numeric precision for financial columns
+ALTER TABLE IF EXISTS employees 
+ALTER COLUMN loan_balance SET DATA TYPE NUMERIC,
+ALTER COLUMN vale_balance SET DATA TYPE NUMERIC,
+ALTER COLUMN sss_loan_balance SET DATA TYPE NUMERIC,
+ALTER COLUMN loan_weekly_deduction SET DATA TYPE NUMERIC,
+ALTER COLUMN sss_loan_weekly_deduction SET DATA TYPE NUMERIC;
+
+-- Attendance Table Hardware Integrity
+ALTER TABLE IF EXISTS attendance
+ADD COLUMN IF NOT EXISTS late_minutes NUMERIC DEFAULT 0,
+ADD COLUMN IF NOT EXISTS undertime_minutes NUMERIC DEFAULT 0,
+ADD COLUMN IF NOT EXISTS overtime_minutes NUMERIC DEFAULT 0,
+ADD COLUMN IF NOT EXISTS is_half_day BOOLEAN DEFAULT FALSE;
+
+-- Force schema cache reload
+NOTIFY pgrst, 'reload schema';

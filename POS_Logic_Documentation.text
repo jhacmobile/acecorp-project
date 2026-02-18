@@ -1,0 +1,126 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{geometry}
+
+\geometry{margin=1in}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+
+\lstset{style=mystyle}
+
+\title{AceGas Enterprise: POS Inventory Logic Documentation}
+\author{System Architecture Reference}
+\date{October 2023 (v1.5.2)}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+This document outlines the core logic implemented in the \texttt{POS.tsx} component of the AceGas Enterprise Management System. It serves as a technical blueprint for how the system handles purchases and maintains inventory levels across multiple operational nodes.
+
+\section{The Inventory Balancing Algorithm}
+The primary function for managing stock levels is \texttt{performInventoryAdjustment}. This function is executed during order finalization (\texttt{ORDERED} status) or when an order is voided (reversal).
+
+\subsection{Standard Deduction}
+Every item in the cart is subjected to a base deduction from the active node's inventory:
+\begin{equation}
+    Stock_{new} = Stock_{current} - (Quantity \times Factor)
+\end{equation}
+Where $Factor = 1$ for sales and $Factor = -1$ for reversals/voids.
+
+\subsection{Refill Exchange Logic}
+The system employs a specific "Refill-for-Empty" logic to track the pool of empty cylinders.
+
+\begin{enumerate}
+    \item \textbf{Identification}: If an item is a \texttt{Refill} and the user selected \texttt{isExchange = true}.
+    \item \textbf{Combo Check}: The system checks if the cart contains a matching \texttt{Cylinders} type (chassis). If a chassis is being sold in the same transaction, it is treated as a "New Asset Combo," and the \textbf{Empty pool is NOT incremented}.
+    \item \textbf{Naming Convention}: To find the correct empty cylinder to increment, the system appends \texttt{"-Emp"} to the Refill product's name (e.g., \texttt{"Philgas 11KG"} $\rightarrow$ \texttt{"Philgas 11KG-Emp"}).
+\end{enumerate}
+
+\section{Implementation Code}
+Below is the critical implementation snippet from \texttt{POS.tsx}:
+
+\begin{lstlisting}[language=JavaScript, caption=Inventory Adjustment Logic]
+const performInventoryAdjustment = (items, storeId, isReversal = false) => {
+  const updated = [...stocks];
+  items.forEach(item => {
+    const factor = isReversal ? -1 : 1;
+    // 1. Deduct the sold item (Refill or Part)
+    const sIdx = updated.findIndex(s => 
+      String(s.productId) === String(item.productId) && 
+      String(s.storeId) === String(storeId)
+    );
+    if (sIdx > -1) {
+      updated[sIdx] = { ...updated[sIdx], quantity: updated[sIdx].quantity - (item.qty * factor) };
+    }
+    
+    // 2. Handle Empty Cylinder Returns (Exchanges)
+    if (item.isCylinder && item.isExchange) {
+      const refillProduct = products.find(p => String(p.id) === String(item.productId));
+      if (refillProduct && refillProduct.type === 'Refill') {
+        // Prevent increment if it's a new tank combo sale
+        const hasMatchingCylinderSale = items.some(i => 
+          i.productType === 'Cylinders' && 
+          i.productName.toLowerCase().startsWith(refillProduct.name.toLowerCase())
+        );
+        
+        if (!hasMatchingCylinderSale) {
+          const expectedEmptyName = (refillProduct.name + "-Emp").toLowerCase();
+          const emptyProduct = products.find(p => 
+            p.type === 'Empty Cylinders' && 
+            p.name.toLowerCase() === expectedEmptyName
+          );
+
+          if (emptyProduct) {
+            const eIdx = updated.findIndex(s => 
+              String(s.productId) === String(emptyProduct.id) && 
+              String(s.storeId) === String(storeId)
+            );
+            if (eIdx > -1) {
+              updated[eIdx] = { ...updated[eIdx], quantity: updated[eIdx].quantity + (item.qty * factor) };
+            }
+          }
+        }
+      }
+    }
+  });
+  return updated; // Returns the full updated array for DB sync
+};
+\end{lstlisting}
+
+\section{Key Dependencies}
+For this logic to remain functional, the following must be maintained:
+\begin{itemize}
+    \item \textbf{Type Consistency}: Refills must have the type \texttt{'Refill'}. Empty cylinders must have the type \texttt{'Empty Cylinders'}.
+    \item \textbf{Product Naming}: The naming convention \texttt{[Refill Name] + "-Emp"} is the primary key for lookups.
+    \item \textbf{Store Context}: \texttt{user.selectedStoreId} must be accurately passed to the adjustment function to avoid cross-node inventory corruption.
+\end{itemize}
+
+\end{document}

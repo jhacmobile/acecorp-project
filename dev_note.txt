@@ -1,0 +1,8 @@
+Philgas Enterprise Management System
+Synchronization Marker
+Date: 2024-05-20
+Version: 1.0.4
+Status: 
+- Customers table added to schema.
+- Employee classification updated to Staff/Rider.
+- Full cloud synchronization for Customers, Users, and Employees.
