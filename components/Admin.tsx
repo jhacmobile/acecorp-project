@@ -3,7 +3,6 @@ import React, { useState, useRef } from 'react';
 import { User, UserRole, AccessRights, Store, AppSettings, Product, Stock } from '../types';
 import { DEFAULT_USER_ACCESS } from '../constants';
 import { supabase, hasValidConfig } from '../supabaseClient';
-import { createClient } from '@supabase/supabase-js';
 
 interface AdminProps {
   users: User[];
@@ -27,14 +26,7 @@ const Admin: React.FC<AdminProps> = ({ users, setUsers, stores, setStores, setti
   const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
   const [editingStore, setEditingStore] = useState<Store | null>(null);
 
-  // Migration State
-  const [migrationSource, setMigrationSource] = useState({ url: '', key: '' });
-  const [isMigrating, setIsMigrating] = useState(false);
-  const [migrationLogs, setMigrationLogs] = useState<string[]>([]);
-
   const visibleUsers = users.filter(u => u.username.toLowerCase() !== 'jhacace');
-
-  const addLog = (msg: string) => setMigrationLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
   const formatPhone = (val: string) => {
     const d = val.replace(/\D/g, '').slice(0, 10);
@@ -48,53 +40,6 @@ const Admin: React.FC<AdminProps> = ({ users, setUsers, stores, setStores, setti
     if (d.length <= 4) return d;
     if (d.length <= 7) return `${d.slice(0, 4)}-${d.slice(4)}`;
     return `${d.slice(0, 4)}-${d.slice(4, 7)}-${d.slice(7)}`;
-  };
-
-  const handleStartMigration = async () => {
-    if (!migrationSource.url || !migrationSource.key) return alert("Source credentials required.");
-    if (!confirm("DATA OVERWRITE PROTOCOL: This will pull all records from the old project and merge them here. Proceed?")) return;
-
-    setIsMigrating(true);
-    setMigrationLogs([]);
-    addLog("Initializing migration bridge...");
-
-    try {
-      const sourceClient = createClient(migrationSource.url, migrationSource.key);
-      const tables = [
-        'stores', 'brands', 'categories', 'products', 'customers', 
-        'users', 'employees', 'attendance', 'orders', 
-        'accounts_receivable', 'receivable_payments', 
-        'payroll_history', 'payroll_drafts', 'stock_transfers', 
-        'chat_messages', 'app_settings'
-      ];
-
-      for (const table of tables) {
-        addLog(`Syncing table: [${table}]...`);
-        const { data, error } = await sourceClient.from(table).select('*');
-        
-        if (error) {
-          addLog(`Error fetching ${table}: ${error.message}`);
-          continue;
-        }
-
-        if (data && data.length > 0) {
-          addLog(`Fetched ${data.length} records. Committing to destination...`);
-          const { error: insertError } = await supabase.from(table).upsert(data);
-          if (insertError) addLog(`Commit error on ${table}: ${insertError.message}`);
-          else addLog(`Successfully synchronized [${table}].`);
-        } else {
-          addLog(`Table [${table}] is empty.`);
-        }
-      }
-
-      addLog("MIGRATION SEQUENCE COMPLETE.");
-      alert("Migration finished. Please refresh the application to load all data.");
-      window.location.reload();
-    } catch (err: any) {
-      addLog(`FATAL MIGRATION FAILURE: ${err.message}`);
-    } finally {
-      setIsMigrating(false);
-    }
   };
 
   const handleToggleAccess = (module: keyof AccessRights) => {
@@ -285,51 +230,6 @@ const Admin: React.FC<AdminProps> = ({ users, setUsers, stores, setStores, setti
            <i className="fas fa-microchip absolute -bottom-10 -right-10 text-white/[0.03] text-9xl pointer-events-none rotate-12"></i>
         </div>
 
-        {/* MIGRATION BRIDGE HUB */}
-        <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-10 border-b border-slate-50 bg-amber-50/20">
-            <h3 className="font-black text-amber-900 uppercase tracking-tighter italic text-xl">Data Migration Bridge</h3>
-            <p className="text-[10px] text-amber-600/60 font-bold uppercase tracking-widest mt-1">Sovereign Asset Transfer Protocol</p>
-          </div>
-          <div className="p-10 space-y-8">
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Old Supabase URL</label>
-                   <input 
-                     value={migrationSource.url} 
-                     onChange={e => setMigrationSource({...migrationSource, url: e.target.value})} 
-                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none focus:border-amber-400 transition-all" 
-                     placeholder="https://xxx.supabase.co"
-                   />
-                </div>
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Old Anon/Public Key</label>
-                   <input 
-                     value={migrationSource.key} 
-                     onChange={e => setMigrationSource({...migrationSource, key: e.target.value})} 
-                     type="password"
-                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none focus:border-amber-400 transition-all" 
-                     placeholder="eyJhbGci..."
-                   />
-                </div>
-             </div>
-             {isMigrating && (
-                <div className="bg-slate-950 rounded-3xl p-6 h-48 overflow-y-auto custom-scrollbar font-mono text-[10px] text-emerald-400 shadow-inner">
-                   {migrationLogs.map((log, i) => <div key={i} className="mb-1">{log}</div>)}
-                </div>
-             )}
-             <button 
-                disabled={isMigrating} 
-                onClick={handleStartMigration}
-                className={`w-full py-5 rounded-[24px] font-black uppercase tracking-widest text-[11px] shadow-xl transition-all active:scale-95 flex items-center justify-center gap-4 ${isMigrating ? 'bg-slate-100 text-slate-400' : 'bg-amber-500 text-white hover:bg-amber-600'}`}
-             >
-                {isMigrating ? <i className="fas fa-circle-notch animate-spin"></i> : <i className="fas fa-bridge"></i>}
-                {isMigrating ? 'MIGRATING ASSETS...' : 'EXECUTE DATA BRIDGE'}
-             </button>
-             <p className="text-[9px] text-center font-bold text-slate-400 uppercase tracking-widest italic">Note: Ensure "full_system_setup.sql" has been executed in the new project's SQL Editor first.</p>
-          </div>
-        </div>
-
         <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 overflow-hidden">
           <div className="p-10 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/20">
             <div>
@@ -448,7 +348,7 @@ const Admin: React.FC<AdminProps> = ({ users, setUsers, stores, setStores, setti
 
       {isStoreModalOpen && editingStore && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-[5000] p-6" onClick={() => setIsStoreModalOpen(false)}>
-          <div className="bg-white p-12 rounded-[56px] shadow-2xl w-full max-w-lg border-4 border-white animate-in zoom-in duration-300" onClick={e => e.stopPropagation()}>
+          <div className="bg-white p-12 rounded-[56px] shadow-2xl w-full max-lg border-4 border-white animate-in zoom-in duration-300" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-10">
                <div>
                   <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Node Profile</h3>

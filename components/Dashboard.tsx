@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Order, Product, OrderStatus, Store, Stock, User, PaymentMethod, ReceivablePayment, AccountsReceivable } from '../types';
 import CustomDatePicker from './CustomDatePicker';
 import AceCorpLogo from './AceCorpLogo';
@@ -50,6 +50,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showOrderReceipt, setShowOrderReceipt] = useState(false);
   const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
 
   const activeStore = stores.find(s => String(s.id) === String(selectedStoreId));
   const formatCurrency = (val: number) => `₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -67,31 +71,42 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     }
 
     if (reportPeriod === 'daily') {
-      return base.filter(o => toPHDateString(o.createdAt) === registryDate);
+      base = base.filter(o => toPHDateString(o.createdAt) === registryDate);
     } 
     
-    if (reportPeriod === 'weekly') {
+    else if (reportPeriod === 'weekly') {
       const start = new Date(anchor);
       start.setDate(anchor.getDate() - anchor.getDay());
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
-      return base.filter(o => {
+      base = base.filter(o => {
         const d = new Date(o.createdAt);
         return d >= start && d <= end;
       });
     }
 
-    if (reportPeriod === 'monthly') {
+    else if (reportPeriod === 'monthly') {
       const year = anchor.getFullYear();
       const month = anchor.getMonth();
-      return base.filter(o => {
+      base = base.filter(o => {
         const d = new Date(o.createdAt);
         return d.getFullYear() === year && d.getMonth() === month;
       });
     }
 
-    return [];
+    return base.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
   }, [orders, selectedStoreId, registryDate, reportPeriod, statusFilter, paymentFilter]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedStoreId, registryDate, reportPeriod, statusFilter, paymentFilter]);
+
+  const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredOrders.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredOrders, currentPage]);
 
   const arCollectionsList = useMemo(() => {
     const payments = receivablePayments.filter(rp => {
@@ -411,7 +426,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {filteredOrders.sort((a,b) => b.createdAt.localeCompare(a.createdAt)).map(o => (
+                    {paginatedOrders.map(o => (
                         <tr key={o.id} onClick={() => { setSelectedOrder(o); setShowOrderReceipt(false); setPrintCopyType('ALL'); }} className="hover:bg-sky-50/50 cursor-pointer transition-colors group">
                            <td className="px-6 sm:px-10 py-5">
                               <span className="text-[10px] sm:text-[11px] font-bold text-slate-900 leading-none">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
@@ -429,6 +444,29 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                   </tbody>
                </table>
             </div>
+            
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="px-10 py-6 border-t border-slate-50 flex items-center justify-between shrink-0 bg-white">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Page {currentPage} of {totalPages}</span>
+                <div className="flex gap-2">
+                  <button 
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    className="px-6 py-2.5 bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button 
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    className="px-6 py-2.5 bg-slate-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
          </div>
       </div>
 

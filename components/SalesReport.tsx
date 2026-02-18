@@ -50,6 +50,10 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
   const [showOrderReceipt, setShowOrderReceipt] = useState(false);
   const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
   
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 25;
+
   const hasGlobalAccess = user.assignedStoreIds.includes('all');
 
   useEffect(() => {
@@ -79,31 +83,42 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     }
 
     if (reportPeriod === 'daily') {
-      return base.filter(o => toPHDateString(o.createdAt) === date);
+      base = base.filter(o => toPHDateString(o.createdAt) === date);
     } 
     
-    if (reportPeriod === 'weekly') {
+    else if (reportPeriod === 'weekly') {
       const start = new Date(anchor);
       start.setDate(anchor.getDate() - anchor.getDay());
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
-      return base.filter(o => {
+      base = base.filter(o => {
         const d = new Date(o.createdAt);
         return d >= start && d <= end;
       });
     }
 
-    if (reportPeriod === 'monthly') {
+    else if (reportPeriod === 'monthly') {
       const year = anchor.getFullYear();
       const month = anchor.getMonth();
-      return base.filter(o => {
+      base = base.filter(o => {
         const d = new Date(o.createdAt);
         return d.getFullYear() === year && d.getMonth() === month;
       });
     }
 
-    return [];
+    return base.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
   }, [orders, user.selectedStoreId, date, reportPeriod, statusFilter, paymentFilter, hasGlobalAccess, searchQuery]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [date, reportPeriod, auditMode, statusFilter, paymentFilter, searchQuery]);
+
+  const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredOrders.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredOrders, currentPage]);
 
   const arCollectionRegistry = useMemo(() => {
     const anchor = new Date(date);
@@ -128,8 +143,15 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
         const ar = receivables.find(r => r.id === rp.receivableId);
         const order = orders.find(o => o.id === ar?.orderId);
         return { payment: rp, order, ar };
-    }).filter(item => !!item.order);
+    }).filter(item => !!item.order).sort((a,b) => b.payment.paidAt.localeCompare(a.payment.paidAt));
   }, [receivablePayments, receivables, orders, date, reportPeriod, hasGlobalAccess, user.selectedStoreId]);
+
+  const paginatedAR = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return arCollectionRegistry.slice(start, start + ITEMS_PER_PAGE);
+  }, [arCollectionRegistry, currentPage]);
+
+  const arTotalPages = Math.ceil(arCollectionRegistry.length / ITEMS_PER_PAGE);
 
   const stats = useMemo(() => {
     const revenueOrders = filteredOrders.filter(o => o.status === OrderStatus.ORDERED);
@@ -304,7 +326,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
          )}
       </div>
 
-      {/* SALES MANIFEST ROOT */}
+      {/* SALES MANIFEST ROOT - ALWAYS TARGETS COMPLETE FILTERED DATA */}
       <div id="audit-manifest-report-root" className={selectedOrder ? "hidden" : "hidden text-black font-sans"}>
           <div className="report-container">
              <div className="text-center mb-10 border-b-4 border-black pb-8">
@@ -345,7 +367,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                    </tr>
                 </thead>
                 <tbody className="divide-y divide-black/10">
-                   {filteredOrders.sort((a,b) => b.createdAt.localeCompare(a.createdAt)).map(o => (
+                   {filteredOrders.map(o => (
                       <tr key={o.id}>
                          <td className="p-3 text-[10px] font-mono text-left font-bold">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
                          <td className="p-3 text-[10px] font-mono font-black text-left text-sky-700">#{o.id.slice(-8)}</td>
@@ -427,26 +449,53 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search Ledger..." className="w-full pl-12 pr-12 py-3.5 bg-slate-50 border border-slate-100 rounded-[24px] text-xs font-bold shadow-inner outline-none focus:bg-white focus:border-sky-400 transition-all text-slate-900 uppercase" />
                </div>
                <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredOrders.length} Records Analyzed</span>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {auditMode === 'SALES' ? filteredOrders.length : arCollectionRegistry.length} Records Analyzed
+                  </span>
                </div>
             </div>
-            <div className="flex-1 overflow-x-auto custom-scrollbar p-8">
-               <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden min-w-[900px]">
+            <div className="flex-1 overflow-x-auto custom-scrollbar p-8 flex flex-col">
+               <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden min-w-[900px] flex-1">
                   <table className="w-full text-left">
                      <thead className="bg-slate-50 text-[9px] text-slate-400 font-black uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 shadow-sm"><tr><th className="px-8 py-6">Timestamp</th><th className="px-4 py-6 text-sky-600">Ticket #</th><th className="px-8 py-6">Customer Profile</th><th className="px-4 py-6">Method</th><th className="px-4 py-6">Operator</th><th className="px-6 py-6 text-center">Status</th><th className="px-8 py-6 text-right">Value</th></tr></thead>
                      <tbody className="divide-y divide-slate-50">
                         {auditMode === 'SALES' ? (
-                          filteredOrders.sort((a,b) => b.createdAt.localeCompare(a.createdAt)).map(o => (
+                          paginatedOrders.map(o => (
                              <tr key={o.id} onClick={() => { setSelectedOrder(o); setShowOrderReceipt(false); setPrintCopyType('ALL'); }} className="hover:bg-slate-50/50 transition-colors cursor-pointer group"><td className="px-8 py-6 font-mono text-[10px] text-slate-600"><div className="font-bold text-slate-900">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div><div className="text-[8px] opacity-40">{toPHDateString(o.createdAt)}</div></td><td className="px-4 py-6"><span className="font-mono font-black text-[10px] text-sky-600">#{o.id.slice(-8)}</span></td><td className="px-8 py-6"><p className="text-[11px] font-black uppercase italic text-slate-900 leading-none">{o.customerName}</p></td><td className="px-4 py-6"><span className="text-[9px] font-bold text-slate-500 uppercase">{o.paymentMethod}</span></td><td className="px-4 py-6"><p className="text-[11px] font-black uppercase italic text-sky-600">{o.createdBy}</p></td><td className="px-6 py-6 text-center"><span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>{o.status}</span></td><td className="px-8 py-6 text-right"><span className="text-[14px] font-black italic text-slate-900">{formatCurrency(o.totalAmount)}</span></td></tr>
                           ))
                         ) : (
-                          arCollectionRegistry.sort((a,b) => b.payment.paidAt.localeCompare(a.payment.paidAt)).map((item, i) => (
+                          paginatedAR.map((item, i) => (
                              <tr key={i} className="hover:bg-slate-50/50 transition-colors group"><td className="px-8 py-6 text-[10px] font-bold text-slate-900">{new Date(item.payment.paidAt).toLocaleDateString()}</td><td className="px-4 py-6"><span className="font-mono font-black text-sky-600">PAY-{item.payment.id.slice(-4)}</span></td><td className="px-8 py-6 font-black uppercase italic text-slate-800 text-[11px]">{item.order?.customerName}</td><td className="px-4 py-6 text-[10px] font-bold text-slate-500">{item.payment.paymentMethod}</td><td colSpan={2} className="px-6 py-6 text-center"><span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100">COLLECTED</span></td><td className="px-8 py-6 text-right font-black italic text-emerald-700">{formatCurrency(item.payment.amount)}</td></tr>
                           ))
                         )}
                      </tbody>
                   </table>
                </div>
+               
+               {/* Pagination Controls */}
+               {((auditMode === 'SALES' && totalPages > 1) || (auditMode === 'AR_COLLECTION' && arTotalPages > 1)) && (
+                 <div className="mt-8 flex items-center justify-between shrink-0 bg-white px-4">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      Page {currentPage} of {auditMode === 'SALES' ? totalPages : arTotalPages}
+                    </span>
+                    <div className="flex gap-2">
+                      <button 
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        className="px-6 py-2.5 bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+                      <button 
+                        disabled={currentPage === (auditMode === 'SALES' ? totalPages : arTotalPages)}
+                        onClick={() => setCurrentPage(prev => Math.min(auditMode === 'SALES' ? totalPages : arTotalPages, prev + 1))}
+                        className="px-6 py-2.5 bg-slate-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </div>
+                 </div>
+               )}
             </div>
          </div>
       </div>

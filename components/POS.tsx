@@ -50,9 +50,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   const [riderSearchQuery, setRiderSearchQuery] = useState('');
   const [isRiderDropdownOpen, setIsRiderDropdownOpen] = useState(false);
 
-  // Print Management
-  const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
-
   // History Registry State
   const [historyTab, setHistoryTab] = useState<HistoryTab>('store');
   const [historyDate, setHistoryDate] = useState(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
@@ -66,7 +63,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   const [suggestions, setSuggestions] = useState<Customer[]>([]);
   const [activeSuggestionField, setActiveSuggestionField] = useState<'phone' | 'firstName' | 'lastName' | null>(null);
 
-  const LOW_STOCK_THRESHOLD = 3;
   const isAdmin = user.role === UserRole.ADMIN;
 
   const getPHTimestamp = () => new Date().toISOString();
@@ -134,7 +130,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     setEditingOrderId(null);
     setSuggestions([]);
     setActiveSuggestionField(null);
-    setPrintCopyType('ALL');
   };
 
   const getStockForStore = (productId: string) => {
@@ -446,7 +441,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
         setOrders(nextOrders);
         if (receiptDisplayOrder) {
           setCompletedOrder(receiptDisplayOrder);
-          setPrintCopyType('ALL');
           setIsReceiptPreviewOpen(true);
         }
         resetTerminal();
@@ -517,23 +511,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   const handleReprint = () => {
     if (!selectedHistoryOrder) return;
     setCompletedOrder(selectedHistoryOrder);
-    setPrintCopyType('ALL');
     setIsReceiptPreviewOpen(true);
-  };
-
-  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    if (type === 'ALL') {
-      const copies: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
-      for (const copy of copies) {
-        setPrintCopyType(copy);
-        await new Promise(resolve => setTimeout(resolve, 250));
-        window.print();
-        await new Promise(resolve => setTimeout(resolve, 250));
-      }
-    } else {
-      setPrintCopyType(type);
-      setTimeout(() => { window.print(); }, 150);
-    }
   };
 
   const generateReceiptPart = (order: Order, label: string) => {
@@ -639,6 +617,23 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     return [...result, ...sorted];
   }, [products]);
 
+  // Enhanced product filtering and sorting logic
+  const sortedProducts = useMemo(() => {
+    const base = products.filter(p => p.status === 'Active' && (activeTypeTab === 'ALL' || p.type === activeTypeTab) && p.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    return base.sort((a, b) => {
+      const stockA = getStockForStore(a.id);
+      const stockB = getStockForStore(b.id);
+      
+      // Stock vs No Stock Priority
+      if (stockA > 0 && stockB === 0) return -1;
+      if (stockA === 0 && stockB > 0) return 1;
+      
+      // Secondary: Alphabetical
+      return a.name.localeCompare(b.name);
+    });
+  }, [products, activeTypeTab, searchQuery, stocks, user.selectedStoreId]);
+
   const filteredHistory = useMemo(() => {
     let base = orders.filter(o => String(o.storeId) === String(user.selectedStoreId) && toPHDateString(o.createdAt) === historyDate);
     if (historyStatusFilter !== 'ALL') base = base.filter(o => o.status === historyStatusFilter);
@@ -685,10 +680,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
             color: black !important; 
             z-index: 9999 !important;
           }
-          #pos-receipt-print-root { 
-            visibility: visible !important; 
-            box-sizing: border-box !important;
-          }
           .receipt-copy { 
              display: block !important;
              page-break-after: always !important; 
@@ -705,9 +696,9 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
       <div id="pos-receipt-print-root" className="hidden">
         {completedOrder && (
           <div className="w-[80mm] bg-white">
-             {(printCopyType === 'ALL' || printCopyType === 'CUSTOMER') && generateReceiptPart(completedOrder, 'CUSTOMER COPY')}
-             {(printCopyType === 'ALL' || printCopyType === 'GATE') && generateReceiptPart(completedOrder, 'GATE PASS')}
-             {(printCopyType === 'ALL' || printCopyType === 'STORE') && generateReceiptPart(completedOrder, 'STORE COPY')}
+             {['CUSTOMER COPY', 'GATE PASS', 'STORE COPY'].map((label, idx) => (
+               <div key={idx} className="receipt-copy">{generateReceiptPart(completedOrder, label)}</div>
+             ))}
           </div>
         )}
       </div>
@@ -755,7 +746,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
               {products.filter(p => p.type === 'Cylinders' && p.status === 'Active').map(p => {
                 const stock = getStockForStore(p.id);
                 return (
-                  <button key={p.id} onClick={() => { addToCart(p, false); setShowCylinderPicker(false); setPendingRefillProduct(null); }} disabled={stock <= 0} className={`p-6 bg-white border rounded-[32px] text-left hover:border-sky-300 hover:shadow-xl transition-all flex flex-col group ${stock <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : 'border-slate-100 shadow-sm'}`}><span className="text-[10px] font-black text-slate-800 uppercase italic leading-tight mb-2 group-hover:text-sky-600">{p.name}</span><span className="text-[14px] font-black text-slate-900 mt-auto">₱{formatCurrency(p.price)}</span><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">{stock} Ready</p></button>
+                  <button key={p.id} onClick={() => { addToCart(p, false); setShowCylinderPicker(false); setPendingRefillProduct(null); }} disabled={stock <= 0} className={`p-6 bg-white border rounded-[32px] text-left hover:border-sky-300 hover:shadow-xl transition-all flex flex-col group ${stock <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : 'border-slate-100 shadow-sm'}`}><span className="text-[10px] font-black text-slate-800 uppercase italic leading-tight mb-2 group-hover:text-sky-600">{p.name}</span><span className="text-[14px] font-black text-slate-900 mt-auto">₱{formatCurrency(p.price)}</span><p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${stock === 0 ? 'text-red-500' : stock < 10 ? 'text-orange-500' : 'text-emerald-500'}`}>{stock} Ready</p></button>
                 );
               })}
             </div>
@@ -782,17 +773,11 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar mb-6 bg-white border border-slate-200 shadow-inner rounded-xl p-6">
                  <div className="receipt-container font-mono text-black text-center text-[10px] w-full pt-2">
-                    {generateReceiptPart(completedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}
+                    {generateReceiptPart(completedOrder, 'CUSTOMER COPY')}
                  </div>
               </div>
-              <div className="p-4 border-t bg-white flex flex-col gap-3 shrink-0">
-                 <div className="grid grid-cols-4 gap-2">
-                    <button onClick={() => handlePrintRequest('CUSTOMER')} className={`py-2.5 rounded-xl font-black uppercase text-[8px] transition-all ${printCopyType === 'CUSTOMER' ? 'bg-sky-50 text-sky-600 border-2 border-sky-400' : 'bg-white border-2 border-slate-200 text-slate-900 hover:bg-slate-50'}`}>Cust</button>
-                    <button onClick={() => handlePrintRequest('GATE')} className={`py-2.5 rounded-xl font-black uppercase text-[8px] transition-all ${printCopyType === 'GATE' ? 'bg-sky-50 text-sky-600 border-2 border-sky-400' : 'bg-white border-2 border-slate-200 text-slate-900 hover:bg-slate-50'}`}>Gate</button>
-                    <button onClick={() => handlePrintRequest('STORE')} className={`py-2.5 rounded-xl font-black uppercase text-[8px] transition-all ${printCopyType === 'STORE' ? 'bg-sky-50 text-sky-600 border-2 border-sky-400' : 'bg-white border-2 border-slate-200 text-slate-900 hover:bg-slate-50'}`}>Store</button>
-                    <button onClick={() => handlePrintRequest('ALL')} className={`py-2.5 rounded-xl font-black uppercase text-[8px] shadow-xl transition-all ${printCopyType === 'ALL' ? 'bg-slate-950 text-white' : 'bg-slate-800 text-slate-200'}`}>ALL</button>
-                 </div>
-                 <button onClick={() => handlePrintRequest(printCopyType)} className="w-full py-4 bg-sky-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Print</button>
+              <div className="p-4 border-t bg-white flex flex-col gap-3 shrink-0 no-print">
+                 <button onClick={() => window.print()} className="w-full py-4 bg-sky-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Print</button>
                  <button onClick={() => { setIsReceiptPreviewOpen(false); setCompletedOrder(null); }} className="w-full py-4 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all">Dismiss View</button>
               </div>
            </div>
@@ -970,14 +955,17 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 custom-scrollbar content-start">
-            {products.filter(p => p.status === 'Active' && (activeTypeTab === 'ALL' || p.type === activeTypeTab) && p.name.toLowerCase().includes(searchQuery.toLowerCase())).map(p => {
+            {sortedProducts.map(p => {
                const stock = getStockForStore(p.id);
+               // Threshold Logic: Red (0), Orange (<10), Green (10+)
+               const stockLabelColor = stock === 0 ? 'text-red-500' : stock < 10 ? 'text-orange-500' : 'text-emerald-500';
+               
                return (
                  <button key={p.id} onClick={() => p.type === 'Refill' ? setPendingRefillProduct(p) : addToCart(p)} disabled={stock <= 0} className={`p-6 bg-white border rounded-[32px] text-left hover:border-sky-300 hover:shadow-xl transition-all flex flex-col group ${stock <= 0 ? 'opacity-40 grayscale border-transparent shadow-none' : 'border-slate-100 shadow-sm'}`}>
                     <h4 className="font-black text-slate-800 uppercase italic text-[11px] leading-tight group-hover:text-sky-600 transition-colors mb-2">{p.name}</h4>
                     <div className="mt-auto text-slate-900">
                        <p className="text-base font-black">₱{formatCurrency(p.price)}</p>
-                       <p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${stock <= LOW_STOCK_THRESHOLD ? 'text-amber-500' : 'text-slate-400'}`}>{stock} Units Ready</p>
+                       <p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${stockLabelColor}`}>{stock} Units Ready</p>
                     </div>
                  </button>
                );
