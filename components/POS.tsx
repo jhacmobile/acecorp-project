@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User, Customer, Product, Stock, Order, OrderStatus, OrderItem, Employee, Store, EmployeeType, UserRole, AccountsReceivable, ReceivablePayment, PaymentMethod } from '../types';
 import { PICKUP_CUSTOMER } from '../constants';
@@ -514,7 +513,8 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   const handleReprint = () => {
     if (!selectedHistoryOrder) return;
     setCompletedOrder(selectedHistoryOrder);
-    handlePrintRequest('ALL');
+    setPrintCopyType('ALL');
+    setIsReceiptPreviewOpen(true);
   };
 
   const generateReceiptPart = (order: Order, label: string) => {
@@ -566,23 +566,11 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     );
   };
 
-  // SEQUENTIAL PRINT ENGINE: Mimics manual cut behavior for ALL button
-  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    if (type === 'ALL') {
-      const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
-      for (const copy of sequence) {
-         setPrintCopyType(copy);
-         // Settlement delay to ensure DOM update before print dialog capture
-         await new Promise(r => setTimeout(r, 300));
-         window.print();
-      }
-      setPrintCopyType('ALL');
-    } else {
-      setPrintCopyType(type);
-      setTimeout(() => {
-         window.print();
-      }, 150);
-    }
+  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    setPrintCopyType(type);
+    setTimeout(() => {
+       window.print();
+    }, 150);
   };
 
   const handleVoidOrder = async () => {
@@ -593,14 +581,16 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     
     if (window.confirm("VOID PROTOCOL: Permanently cancel this record and reverse inventory?")) {
         try {
+            // Perform inventory reversal calculation (isReversal = true)
             const nextStocks = performInventoryAdjustment(orderToVoid.items, orderToVoid.storeId, true);
-            const affectedStockIds = new Set<string>();
-            orderToVoid.items.forEach(item => {
-               const s = stocks.find(st => st.productId === item.productId && st.storeId === orderToVoid.storeId);
-               if (s) affectedStockIds.add(s.id);
+            
+            // Detect all changed stock records to ensure Supabase updates all affected SKUs (Refills AND Empty Cylinders)
+            const stocksToSync = nextStocks.filter(nextS => {
+                const prevS = stocks.find(s => s.id === nextS.id);
+                // We only need to sync the stocks that actually changed during this adjustment
+                return prevS && prevS.quantity !== nextS.quantity;
             });
             
-            const stocksToSync = nextStocks.filter(s => affectedStockIds.has(s.id));
             const cancelledOrder: Order = { 
                 ...orderToVoid, 
                 status: OrderStatus.CANCELLED, 
@@ -620,6 +610,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                 arToSync.push({ ...existingAR, status: 'paid', outstandingAmount: 0, remarks: 'ORDER_VOIDED' });
             }
 
+            // Sync updated order status, adjusted stocks, and closed AR
             const syncSuccess = await onSync([cancelledOrder], stocksToSync, undefined, arToSync);
             if (!syncSuccess) {
                 alert("VOID COMPLETED LOCALLY: Sync failed.");
@@ -713,10 +704,15 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
       <div id="pos-receipt-print-root" className="hidden">
         {completedOrder && (
           <div className="w-[80mm] bg-white">
-             {/* Sequential Logic Override: During sequence, state is set to specific copy */}
-             <div className="receipt-copy">
-                {generateReceiptPart(completedOrder, `${printCopyType === 'ALL' ? 'CUSTOMER' : printCopyType} COPY`)}
-             </div>
+             {printCopyType === 'ALL' ? (
+                <>
+                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'CUSTOMER COPY')}</div>
+                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'GATE PASS')}</div>
+                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'STORE COPY')}</div>
+                </>
+             ) : (
+                <div className="receipt-copy">{generateReceiptPart(completedOrder, `${printCopyType} COPY`)}</div>
+             )}
           </div>
         )}
       </div>
@@ -792,9 +788,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar mb-6 bg-white border border-slate-200 shadow-inner rounded-xl p-6">
                  <div className="receipt-container font-mono text-black text-center text-[10px] w-full pt-2">
-                    <div className="receipt-copy">{generateReceiptPart(completedOrder, 'CUSTOMER COPY')}</div>
-                    <div className="receipt-copy">{generateReceiptPart(completedOrder, 'GATE PASS')}</div>
-                    <div className="receipt-copy">{generateReceiptPart(completedOrder, 'STORE COPY')}</div>
+                    {generateReceiptPart(completedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}
                  </div>
               </div>
               <div className="p-4 border-t bg-white flex flex-col gap-3 shrink-0 no-print">
