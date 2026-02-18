@@ -214,32 +214,35 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden text-slate-900 font-sans">
       <style>{`
         @media print {
-          /* General Print Settings */
+          /* Force page dimensions and margins */
           @page { size: portrait; margin: 15mm; }
           
-          /* Force standard document scroll and visibility */
+          /* Neutralize application overflow constraints */
           html, body { 
             height: auto !important; 
             overflow: visible !important; 
             background: white !important;
             color: black !important;
             font-family: 'Inter', sans-serif;
+            margin: 0 !important;
+            padding: 0 !important;
           }
 
-          /* Overcome App.tsx / Layout constraints */
-          #root, main, .flex-1, .h-screen, .overflow-hidden {
+          /* Force all containers to expand vertically */
+          #root, main, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar {
             height: auto !important;
             overflow: visible !important;
             display: block !important;
             min-height: 0 !important;
+            position: static !important;
           }
 
-          /* Hide UI elements */
-          .no-print, header, aside, .pagination-controls { 
+          /* Hide interface chrome */
+          .no-print, header, aside, .pagination-controls, button { 
             display: none !important; 
           }
 
-          /* Manifest Print Logic */
+          /* Optimize table for multi-page document */
           #audit-manifest-report-root {
             display: block !important;
             visibility: visible !important;
@@ -247,6 +250,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
             position: relative !important;
             top: 0 !important;
             left: 0 !important;
+            padding: 0 !important;
           }
 
           #audit-manifest-report-root table {
@@ -256,6 +260,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
             display: table !important;
           }
 
+          /* Repeat headers on every page */
           #audit-manifest-report-root thead {
             display: table-header-group !important;
           }
@@ -266,49 +271,51 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
           }
 
           #audit-manifest-report-root td, #audit-manifest-report-root th {
-            border-bottom: 1px solid #eee !important;
+            border-bottom: 1px solid #ddd !important;
+            padding: 8px !important;
           }
-
-          /* Thermal Print Logic */
+          
+          /* Thermal Reprint Logic */
           #audit-thermal-print-root {
-            display: none !important; /* Only show when Reprinting specific thermal */
+            display: none !important;
           }
         }
       `}</style>
       
       {/* PROFESSIONAL FULL MANIFEST PRINT (Multi-page optimized) */}
       <div id="audit-manifest-report-root" className="hidden">
-         <div className="text-center mb-10 border-b-4 border-slate-950 pb-6">
+         <div className="text-center mb-10 border-b-4 border-slate-900 pb-6">
             <h1 className="text-3xl font-black uppercase italic tracking-tighter">{headerName}</h1>
-            <h2 className="text-sm font-bold uppercase tracking-[0.4em] text-slate-500 mt-2">Registry Audit Manifest • Full Document</h2>
+            <h2 className="text-sm font-bold uppercase tracking-[0.4em] text-slate-500 mt-2">Registry Audit Manifest • System Extract</h2>
             <div className="flex justify-center gap-10 mt-4 text-[10px] font-black uppercase">
-               <p>Reference: {date}</p>
-               <p>Interval: {reportPeriod}</p>
-               <p>Operator: {user.username}</p>
+               <p>Date Range: {reportPeriod.toUpperCase()} ({date})</p>
+               <p>Auth Operator: {user.username}</p>
             </div>
          </div>
 
          {auditMode === 'SALES' ? (
            <table className="w-full text-left">
               <thead>
-                 <tr className="border-b-2 border-slate-900 text-[10px] font-black uppercase">
+                 <tr className="bg-slate-50 text-[10px] font-black uppercase">
                     <th className="py-4 px-2">Timestamp</th>
                     <th className="py-4 px-2">Ticket #</th>
-                    <th className="py-4 px-2">Entity Profile</th>
+                    <th className="py-4 px-2">Customer Profile</th>
                     <th className="py-4 px-2">Method</th>
+                    <th className="py-4 px-2">Operator (Op)</th>
                     <th className="py-4 px-2 text-center">Status</th>
                     <th className="py-4 px-2 text-right">Settlement</th>
                  </tr>
               </thead>
-              <tbody className="text-[10px] font-bold uppercase">
+              <tbody className="text-[10px] font-medium uppercase">
                  {filteredOrders.map(o => (
-                    <tr key={o.id} className="border-b border-slate-100">
-                       <td className="py-3 px-2">{toPHDateString(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                    <tr key={o.id} className="border-b border-slate-200">
+                       <td className="py-3 px-2 font-mono">{toPHDateString(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
                        <td className="py-3 px-2">#{o.id.slice(-8)}</td>
-                       <td className="py-3 px-2">{o.customerName}</td>
+                       <td className="py-3 px-2 font-black italic">{o.customerName}</td>
                        <td className="py-3 px-2">{o.paymentMethod}</td>
+                       <td className="py-3 px-2 text-sky-600 font-bold">{o.createdBy}</td>
                        <td className="py-3 px-2 text-center">{o.status}</td>
-                       <td className="py-3 px-2 text-right">{formatCurrency(o.totalAmount)}</td>
+                       <td className="py-3 px-2 text-right font-black">{formatCurrency(o.totalAmount)}</td>
                     </tr>
                  ))}
               </tbody>
@@ -316,54 +323,54 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
          ) : (
            <table className="w-full text-left">
               <thead>
-                 <tr className="border-b-2 border-slate-900 text-[10px] font-black uppercase">
+                 <tr className="bg-slate-50 text-[10px] font-black uppercase">
                     <th className="py-4 px-2">Timestamp</th>
                     <th className="py-4 px-2">PAY #</th>
-                    <th className="py-4 px-2">Customer Profile</th>
+                    <th className="py-4 px-2">Entity Profile</th>
                     <th className="py-4 px-2">Method</th>
-                    <th className="py-4 px-2 text-right">Amount</th>
+                    <th className="py-4 px-2 text-right">Value</th>
                  </tr>
               </thead>
-              <tbody className="text-[10px] font-bold uppercase">
+              <tbody className="text-[10px] font-medium uppercase">
                  {arCollectionRegistry.map((item, i) => (
-                    <tr key={i} className="border-b border-slate-100">
-                       <td className="py-3 px-2">{toPHDateString(item.payment.paidAt)}</td>
+                    <tr key={i} className="border-b border-slate-200">
+                       <td className="py-3 px-2 font-mono">{toPHDateString(item.payment.paidAt)}</td>
                        <td className="py-3 px-2">PAY-{item.payment.id.slice(-4)}</td>
-                       <td className="py-3 px-2">{item.order?.customerName}</td>
+                       <td className="py-3 px-2 font-black italic">{item.order?.customerName}</td>
                        <td className="py-3 px-2">{item.payment.paymentMethod}</td>
-                       <td className="py-3 px-2 text-right">{formatCurrency(item.payment.amount)}</td>
+                       <td className="py-3 px-2 text-right font-black">{formatCurrency(item.payment.amount)}</td>
                     </tr>
                  ))}
               </tbody>
            </table>
          )}
 
-         <div className="mt-12 pt-6 border-t-2 border-slate-200 flex justify-between items-baseline">
+         <div className="mt-12 pt-6 border-t-2 border-slate-300 flex justify-between items-baseline">
             <div className="text-[11px] font-black uppercase">
-               <p className="text-slate-500">Aggregate Audit Summary</p>
-               <p className="text-xl mt-1">Total Inflow: {formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</p>
+               <p className="text-slate-500 mb-1">AGGREGATE AUDIT FOOTER</p>
+               <p className="text-lg">Audit Total Inflow: {formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</p>
             </div>
-            <p className="text-[8px] font-bold text-slate-400 uppercase">System Integrity Lock: {new Date().toLocaleString()}</p>
+            <p className="text-[8px] font-bold text-slate-400 uppercase">Registry Lock: {new Date().toLocaleString()}</p>
          </div>
       </div>
 
-      {/* HEADER SUMMARY SECTION */}
+      {/* INTELLIGENCE HUB SUMMARY */}
       <div className="px-8 py-6 bg-slate-950 text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 no-print">
          <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-12 relative z-10 w-full sm:w-auto">
             <div className="shrink-0 border-l-4 border-sky-500 pl-6">
-               <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1 leading-none">Net System Inflow</p>
+               <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1 leading-none">Net Actual Cash Inflow</p>
                <h2 className="text-3xl font-black italic tracking-tighter text-white leading-none">{formatCurrency(stats.totalSales + stats.arCollectionsTotal)}</h2>
             </div>
             <div className="flex flex-wrap gap-8 overflow-x-auto no-scrollbar items-center">
                <div className="shrink-0">
-                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none">Booked Revenue</p>
+                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none">Total Booked Revenue</p>
                   <p className="text-lg font-black italic tracking-tight text-white leading-none">{formatCurrency(stats.totalSales + stats.newARGenerated)}</p>
                </div>
                <div className="shrink-0">
                   <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none">AR Collections</p>
                   <p className="text-lg font-black italic tracking-tight text-emerald-400 leading-none">{formatCurrency(stats.arCollectionsTotal)}</p>
                </div>
-               <div className="hidden sm:flex gap-6 border-l border-white/10 pl-6">
+               <div className="hidden lg:flex gap-6 border-l border-white/10 pl-6">
                   {Object.entries(stats.paymentBreakdown).filter(([_,v]) => v > 0).slice(0, 3).map(([method, amount]) => (
                     <div key={method} className="shrink-0">
                        <p className="text-[7px] font-black text-slate-600 uppercase mb-1 leading-none">{method}</p>
@@ -373,17 +380,17 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                </div>
             </div>
          </div>
-         <div className="flex items-center gap-4 no-print">
-            <button onClick={() => window.print()} className="px-6 py-3 bg-white text-slate-950 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center gap-2 hover:bg-sky-50 transition-all active:scale-95"><i className="fas fa-print"></i> Generate Full Report</button>
+         <div className="no-print">
+            <button onClick={() => window.print()} className="px-6 py-3 bg-white text-slate-950 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center gap-2 hover:bg-sky-50 transition-all active:scale-95"><i className="fas fa-print"></i> Full Audit Report</button>
          </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden no-print">
-         <aside className="w-[300px] bg-white border-r border-slate-200 flex flex-col h-full shrink-0">
-            <div className="p-10 space-y-12">
+         <aside className="w-[320px] bg-white border-r border-slate-200 flex flex-col h-full shrink-0">
+            <div className="p-10 space-y-12 h-full overflow-y-auto custom-scrollbar">
                <div>
                   <h1 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">{headerName}</h1>
-                  <p className="text-[9px] font-bold text-sky-600 uppercase tracking-[0.2em] mt-2">Professional Audit Desk</p>
+                  <p className="text-[9px] font-bold text-sky-600 uppercase tracking-[0.2em] mt-2">Internal Audit Protocol</p>
                </div>
                
                <div className="space-y-10">
@@ -397,13 +404,40 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
 
                   <div className="space-y-4"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Reference Date</label><CustomDatePicker value={date} onChange={setDate} className="w-full shadow-sm" /></div>
                   
-                  <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 space-y-4">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Time Scope</label>
-                     <div className="flex gap-2 p-1 bg-white rounded-xl">
-                        {(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (
-                          <button key={p} onClick={() => setReportPeriod(p)} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase transition-all ${reportPeriod === p ? 'bg-sky-600 text-white shadow-md' : 'text-slate-400'}`}>{p}</button>
-                        ))}
+                  <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 space-y-6">
+                     <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Time Scope</label>
+                        <div className="flex gap-1 p-1 bg-white rounded-xl shadow-sm">
+                           {(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (
+                             <button key={p} onClick={() => setReportPeriod(p)} className={`flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${reportPeriod === p ? 'bg-sky-600 text-white shadow-md' : 'text-slate-400'}`}>{p}</button>
+                           ))}
+                        </div>
                      </div>
+                     
+                     {auditMode === 'SALES' && (
+                        <>
+                           <div className="space-y-2">
+                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Status Filter</label>
+                              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="w-full bg-white border border-slate-100 p-2.5 rounded-xl text-[10px] font-black uppercase italic outline-none">
+                                 <option value="ALL">All Status</option>
+                                 <option value={OrderStatus.ORDERED}>Ordered</option>
+                                 <option value={OrderStatus.RECEIVABLE}>Receivable</option>
+                                 <option value={OrderStatus.CANCELLED}>Cancelled</option>
+                              </select>
+                           </div>
+                           <div className="space-y-2">
+                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Payment Method</label>
+                              <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value as any)} className="w-full bg-white border border-slate-100 p-2.5 rounded-xl text-[10px] font-black uppercase italic outline-none">
+                                 <option value="ALL">All Methods</option>
+                                 <option value="CASH">Cash</option>
+                                 <option value="GCASH">GCash</option>
+                                 <option value="MAYA">Maya</option>
+                                 <option value="BANK">Bank</option>
+                                 <option value="OTHER">Other</option>
+                              </select>
+                           </div>
+                        </>
+                     )}
                   </div>
                </div>
             </div>
@@ -411,28 +445,28 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
 
          <div className="flex-1 flex flex-col bg-white overflow-hidden">
             <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-               <div className="relative w-full max-w-xl">
-                  <i className="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-300"></i>
-                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search Audit Trails..." className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-100 rounded-[28px] text-[11px] font-bold uppercase outline-none focus:bg-white focus:border-sky-400 transition-all shadow-inner" />
+               <div className="relative w-full max-w-xl group">
+                  <i className="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-sky-500 transition-colors"></i>
+                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search Ledger Registry (Customer, Ticket, Operator)..." className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-100 rounded-[28px] text-[11px] font-bold uppercase outline-none focus:bg-white focus:border-sky-400 transition-all shadow-inner" />
                </div>
                <div className="flex items-center gap-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  Page <span className="text-slate-950">{currentPage}</span> of {currentTotalPages}
+                  Displaying turn <span className="text-slate-950">{currentPage}</span> of {currentTotalPages}
                </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-10 bg-slate-50/30">
-               <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 overflow-hidden flex flex-col h-full min-w-[900px]">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-10 bg-slate-50/20">
+               <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 overflow-hidden flex flex-col h-full min-w-[1000px]">
                   <div className="flex-1 overflow-y-auto custom-scrollbar">
                      <table className="w-full text-left">
                         <thead className="bg-slate-50 text-[10px] text-slate-400 font-black uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 shadow-sm">
                            <tr>
                               <th className="px-10 py-6">Timestamp</th>
                               <th className="px-4 py-6 text-sky-600">Ticket #</th>
-                              <th className="px-10 py-6">Customer / Entity</th>
+                              <th className="px-10 py-6">Customer / Entity Profile</th>
                               <th className="px-4 py-6">Method</th>
-                              <th className="px-4 py-6">Op</th>
+                              <th className="px-6 py-6">Op</th>
                               <th className="px-6 py-6 text-center">Status</th>
-                              <th className="px-10 py-6 text-right">Value</th>
+                              <th className="px-10 py-6 text-right">Total Settlement</th>
                            </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
@@ -446,9 +480,9 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                                    <td className="px-4 py-6"><span className="font-mono font-black text-[10px] text-sky-600">#{o.id.slice(-8)}</span></td>
                                    <td className="px-10 py-6"><p className="text-[12px] font-black uppercase italic text-slate-900 leading-none">{o.customerName}</p></td>
                                    <td className="px-4 py-6"><span className="text-[9px] font-bold text-slate-500 uppercase">{o.paymentMethod}</span></td>
-                                   <td className="px-4 py-6"><p className="text-[10px] font-black text-sky-600 uppercase italic leading-none">{o.createdBy}</p></td>
-                                   <td className="px-6 py-6 text-center"><span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>{o.status}</span></td>
-                                   <td className="px-10 py-6 text-right"><span className="text-[15px] font-black italic text-slate-950">{formatCurrency(o.totalAmount)}</span></td>
+                                   <td className="px-6 py-6"><p className="text-[11px] font-black text-sky-600 uppercase italic leading-none">{o.createdBy}</p></td>
+                                   <td className="px-6 py-6 text-center"><span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : o.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>{o.status}</span></td>
+                                   <td className="px-10 py-6 text-right"><span className="text-[16px] font-black italic text-slate-950">{formatCurrency(o.totalAmount)}</span></td>
                                 </tr>
                              ))
                            ) : (
@@ -467,13 +501,13 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                      </table>
                   </div>
                   
-                  {/* PAGINATION CONTROLS */}
+                  {/* PAGINATION ENGINE */}
                   {currentTotalPages > 1 && (
                     <div className="px-10 py-8 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0 pagination-controls">
-                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Displaying page {currentPage} turns</p>
+                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Registry turn {currentPage} of {currentTotalPages}</p>
                        <div className="flex gap-4">
-                          <button disabled={currentPage === 1} onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} className="px-8 py-3 bg-white text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 hover:bg-sky-50 transition-all disabled:opacity-20">Previous Turn</button>
-                          <button disabled={currentPage === currentTotalPages} onClick={() => setCurrentPage(prev => Math.min(currentTotalPages, prev + 1))} className="px-8 py-3 bg-slate-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-all disabled:opacity-20">Next Turn</button>
+                          <button disabled={currentPage === 1} onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} className="px-8 py-3 bg-white text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 hover:bg-sky-50 transition-all disabled:opacity-20 active:scale-95">Previous Turn</button>
+                          <button disabled={currentPage === currentTotalPages} onClick={() => setCurrentPage(prev => Math.min(currentTotalPages, prev + 1))} className="px-8 py-3 bg-slate-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-all disabled:opacity-20 active:scale-95">Next Turn</button>
                        </div>
                     </div>
                   )}
@@ -482,50 +516,51 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
          </div>
       </div>
 
+      {/* DETAIL OVERLAY */}
       {selectedOrder && (
          <div className="fixed inset-0 z-[5000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md animate-in zoom-in duration-300 no-print" onClick={() => setSelectedOrder(null)}>
             <div className="bg-white w-full max-w-[500px] rounded-[56px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
                <div className="p-10 border-b border-slate-100 bg-white flex justify-between items-center shrink-0">
                   <div className="flex items-center gap-6">
-                    <h3 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">{showOrderReceipt ? 'Manifest Mirror' : 'Order Detail'}</h3>
+                    <h3 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">{showOrderReceipt ? 'Registry Reprint' : 'Order Asset Detail'}</h3>
                   </div>
                   <button onClick={() => setSelectedOrder(null)} className="text-slate-300 hover:text-red-500 transition-colors"><i className="fas fa-times-circle text-3xl"></i></button>
                </div>
                <div className="flex-1 overflow-y-auto p-10 custom-scrollbar bg-slate-50/30">
                   {showOrderReceipt ? (
                     <div className="bg-white p-10 shadow-xl border border-slate-200 mx-auto w-full max-w-[320px] text-black">
-                        {generateReceiptPart(selectedOrder, 'REPRINT COPY')}
+                        {generateReceiptPart(selectedOrder, 'SYSTEM REPRINT')}
                     </div>
                   ) : (
                     <div className="space-y-8">
                         <div className="p-8 bg-white rounded-[32px] border border-slate-100 space-y-4 shadow-sm">
                            <div className="flex justify-between items-start">
-                              <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer Entity</label><p className="text-[16px] font-black text-slate-950 uppercase italic leading-tight mt-1">{selectedOrder.customerName}</p></div>
+                              <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Entity Profile</label><p className="text-[18px] font-black text-slate-950 uppercase italic leading-tight mt-1">{selectedOrder.customerName}</p></div>
                               <div className="text-right">
-                                 <div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Operator</label><p className="text-[12px] font-black text-sky-600 uppercase italic mt-1">{selectedOrder.createdBy}</p></div>
+                                 <div><label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Operator (Op)</label><p className="text-[13px] font-black text-sky-600 uppercase italic mt-1">{selectedOrder.createdBy}</p></div>
                               </div>
                            </div>
                            <div className="pt-4 border-t border-slate-50 flex justify-between items-center">
-                              <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Settlement</label><p className="text-[13px] font-black text-emerald-600 uppercase italic">{selectedOrder.paymentMethod}</p></div>
+                              <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Settlement Path</label><p className="text-[14px] font-black text-emerald-600 uppercase italic">{selectedOrder.paymentMethod}</p></div>
                               <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase border ${selectedOrder.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-400'}`}>{selectedOrder.status}</span>
                            </div>
                         </div>
                         <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden font-bold">
                            <table className="w-full text-left">
-                              <thead className="bg-slate-50 border-b border-slate-100"><tr className="text-[9px] font-black text-slate-400 uppercase"><th className="px-8 py-4">Registry Asset</th><th className="px-8 py-4 text-right">Value</th></tr></thead>
-                              <tbody className="divide-y divide-slate-100">{selectedOrder.items.map((item, idx) => (<tr key={idx}><td className="px-8 py-5 text-[12px] font-black uppercase italic text-slate-800">{item.productName} (x{item.qty})</td><td className="px-8 py-5 text-right text-[12px] font-black italic text-slate-950">₱{formatCurrency(item.total).replace('₱','')}</td></tr>))}</tbody>
+                              <thead className="bg-slate-50 border-b border-slate-100"><tr className="text-[9px] font-black text-slate-400 uppercase"><th className="px-8 py-4">Registry SKU</th><th className="px-8 py-4 text-right">Value</th></tr></thead>
+                              <tbody className="divide-y divide-slate-100">{selectedOrder.items.map((item, idx) => (<tr key={idx}><td className="px-8 py-5 text-[13px] font-black uppercase italic text-slate-800">{item.productName} (x{item.qty})</td><td className="px-8 py-5 text-right text-[13px] font-black italic text-slate-950">₱{formatCurrency(item.total).replace('₱','')}</td></tr>))}</tbody>
                            </table>
                         </div>
-                        <div className="p-8 bg-slate-950 rounded-[40px] flex justify-between items-center text-white shadow-2xl"><span className="text-[10px] font-black uppercase italic opacity-50">Settlement Total</span><span className="text-3xl font-black italic">{formatCurrency(selectedOrder.totalAmount)}</span></div>
+                        <div className="p-8 bg-slate-950 rounded-[40px] flex justify-between items-center text-white shadow-2xl"><span className="text-[10px] font-black uppercase italic opacity-50">Settlement Aggregate</span><span className="text-3xl font-black italic">{formatCurrency(selectedOrder.totalAmount)}</span></div>
                     </div>
                   )}
                </div>
                <div className="p-10 border-t bg-white flex flex-col gap-4 shrink-0">
                   <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => { setShowOrderReceipt(!showOrderReceipt); }} className="py-5 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-[10px] hover:bg-slate-200 transition-all">{showOrderReceipt ? 'View Audit Data' : 'View Thermal Mirror'}</button>
-                    <button onClick={() => handlePrintRequest('ALL')} className="py-5 bg-sky-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95"><i className="fas fa-print"></i> Authorize Reprint</button>
+                    <button onClick={() => { setShowOrderReceipt(!showOrderReceipt); }} className="py-5 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-[10px] hover:bg-slate-200 transition-all">{showOrderReceipt ? 'View Audit Log' : 'View Thermal Copy'}</button>
+                    <button onClick={() => handlePrintRequest('ALL')} className="py-5 bg-sky-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95"><i className="fas fa-print"></i> Authorize Print</button>
                   </div>
-                  <button onClick={() => setSelectedOrder(null)} className="w-full py-4 text-slate-400 font-black uppercase text-[10px] active:scale-95">Close Viewport</button>
+                  <button onClick={() => setSelectedOrder(null)} className="w-full py-4 text-slate-400 font-black uppercase text-[10px] active:scale-95">Dismiss Detailed View</button>
                </div>
             </div>
          </div>
