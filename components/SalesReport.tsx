@@ -191,8 +191,19 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
   };
 
   const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    setPrintCopyType(type);
-    setTimeout(() => { window.print(); }, 150);
+    if (type === 'ALL') {
+        const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
+        for (const copy of sequence) {
+            setPrintCopyType(copy);
+            await new Promise(resolve => setTimeout(resolve, 100));
+            window.print();
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        setPrintCopyType('ALL');
+    } else {
+        setPrintCopyType(type);
+        setTimeout(() => { window.print(); }, 150);
+    }
   };
 
   const activeStore = stores.find(s => s.id === user.selectedStoreId);
@@ -206,8 +217,35 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
           html, body { height: auto !important; overflow: visible !important; }
           .no-print, header, aside, .pagination-controls, button { display: none !important; }
           #audit-manifest-report-root { display: block !important; width: 100% !important; position: static !important; }
+          #audit-receipt-print-root { 
+            display: block !important; 
+            position: absolute !important; 
+            left: 0 !important; 
+            top: 0 !important; 
+            z-index: 9999 !important; 
+            background: white !important; 
+            width: 80mm !important;
+          }
+          .receipt-copy { 
+             display: block !important;
+             page-break-after: always !important; 
+             break-after: page !important; 
+             width: 68mm !important;
+             margin: 0 auto !important;
+             position: relative !important;
+             overflow: hidden !important;
+          }
         }
       `}</style>
+
+      {/* RECEIPT PRINT ROOT */}
+      <div id="audit-receipt-print-root" className="hidden">
+        {selectedOrder && (
+          <div className="w-[80mm] bg-white">
+             <div className="receipt-copy">{generateReceiptPart(selectedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}</div>
+          </div>
+        )}
+      </div>
       
       {/* INTELLIGENCE HUB SUMMARY */}
       <div className="px-8 py-6 bg-slate-800 text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 no-print">
@@ -368,7 +406,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                <div className="flex-1 overflow-y-auto p-10 custom-scrollbar bg-slate-50/30">
                   {showOrderReceipt ? (
                     <div className="bg-white p-10 shadow-xl border border-slate-200 mx-auto w-full max-w-[320px] text-black">
-                        {generateReceiptPart(selectedOrder, 'SYSTEM REPRINT')}
+                        {generateReceiptPart(selectedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}
                     </div>
                   ) : (
                     <div className="space-y-8">

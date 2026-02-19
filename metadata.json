@@ -1,5 +1,5 @@
 {
-  "name": "CP_0218 - AceCorp Enterprise Management System",
+  "name": "CP_0219 - AceCorp Enterprise Management System",
   "description": "A comprehensive management system for AceCorp featuring HR, Inventory, POS, Sales Reporting, and User Access Control.",
   "requestFramePermissions": [
     "camera"

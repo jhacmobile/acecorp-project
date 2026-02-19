@@ -107,6 +107,23 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     }
   }, [payrollStart, payrollEnd, user.selectedStoreId, payrollDrafts, view]);
 
+  // Auto-fill form when selecting employee or date to allow adding new entries or editing existing ones
+  useEffect(() => {
+    if (overrideEmployeeId && overrideDate) {
+      const existing = attendance.find(a => String(a.employeeId) === String(overrideEmployeeId) && a.date === overrideDate);
+      if (existing) {
+        setOverrideStatus(existing.status);
+        setOverrideTimeIn(existing.timeIn || '');
+        setOverrideTimeOut(existing.timeOut || '');
+      } else {
+        // Reset to defaults if no record exists (Add Mode)
+        setOverrideStatus('REGULAR');
+        setOverrideTimeIn('');
+        setOverrideTimeOut('');
+      }
+    }
+  }, [overrideEmployeeId, overrideDate, attendance]);
+
   const [printTarget, setPrintTarget] = useState<{ type: 'SINGLE' | 'ALL'; empId?: string } | null>(null);
   
   const timeToMinutes = (time: string) => {
@@ -486,9 +503,23 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
               <div><h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">Override Protocol</h3><p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-2">Manual Signal Entry</p></div>
               <div className="space-y-8">
                 <div className="space-y-3"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Reporting Date</label><CustomDatePicker value={overrideDate} onChange={setOverrideDate} className="w-full" /></div>
-                <div className="space-y-3"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Operational Node</label><select value={overrideStoreId} onChange={e => setOverrideStoreId(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl text-[11px] font-black uppercase italic outline-none focus:border-sky-500">{stores.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}</select></div>
-                <div className="space-y-3"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Personnel Profile</label><select value={overrideEmployeeId} onChange={e => setOverrideEmployeeId(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl text-[11px] font-black uppercase outline-none">{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
-                <div className="grid grid-cols-2 gap-5"><div className="space-y-3"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Signal In</label><input type="time" value={overrideTimeIn} onChange={e => setOverrideTimeIn(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black outline-none" /></div><div className="space-y-3"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Signal Out</label><input type="time" value={overrideTimeOut} onChange={e => setOverrideTimeOut(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black outline-none" /></div></div>
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Personnel Profile</label>
+                  <select value={overrideEmployeeId} onChange={e => setOverrideEmployeeId(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl text-[11px] font-black uppercase outline-none focus:border-sky-500">
+                    <option value="" disabled>SELECT PERSONNEL</option>
+                    {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Signal In</label>
+                    <input type="time" value={overrideTimeIn} onChange={e => setOverrideTimeIn(e.target.value)} className="w-full h-14 px-1 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-bold outline-none text-slate-900 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all text-center" />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Signal Out</label>
+                    <input type="time" value={overrideTimeOut} onChange={e => setOverrideTimeOut(e.target.value)} className="w-full h-14 px-1 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-bold outline-none text-slate-900 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all text-center" />
+                  </div>
+                </div>
                 <button onClick={handleAuthorizeAttendanceOverride} className="w-full py-6 bg-slate-950 text-white rounded-[32px] font-black uppercase text-[12px] tracking-widest shadow-2xl active:scale-95 transition-all">Authorize Entry</button>
               </div>
             </div>

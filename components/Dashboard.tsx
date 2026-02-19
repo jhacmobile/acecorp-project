@@ -191,7 +191,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     if (type === 'ALL') {
       const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
       for (const copy of sequence) {
-         setPrintCopyType(copy); await new Promise(r => setTimeout(r, 300)); window.print();
+         setPrintCopyType(copy); 
+         await new Promise(r => setTimeout(r, 100)); 
+         window.print();
+         await new Promise(r => setTimeout(r, 500));
       }
       setPrintCopyType('ALL');
     } else {
@@ -210,8 +213,35 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           #root, main, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar { height: auto !important; overflow: visible !important; display: block !important; position: static !important; }
           .no-print, header, aside, .pagination-controls, button { display: none !important; }
           #dashboard-all-orders-print-root { display: block !important; width: 100% !important; }
+          #dashboard-receipt-print-root { 
+            display: block !important; 
+            position: absolute !important; 
+            left: 0 !important; 
+            top: 0 !important; 
+            z-index: 9999 !important; 
+            background: white !important; 
+            width: 80mm !important;
+          }
+          .receipt-copy { 
+             display: block !important;
+             page-break-after: always !important; 
+             break-after: page !important; 
+             width: 68mm !important;
+             margin: 0 auto !important;
+             position: relative !important;
+             overflow: hidden !important;
+          }
         }
       `}</style>
+
+      {/* RECEIPT PRINT ROOT */}
+      <div id="dashboard-receipt-print-root" className="hidden">
+        {selectedOrder && (
+          <div className="w-[80mm] bg-white">
+             <div className="receipt-copy">{generateReceiptPart(selectedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}</div>
+          </div>
+        )}
+      </div>
       
       <div className="px-8 py-6 bg-slate-800 text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 gap-4 sm:gap-0 no-print">
          <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-12 relative z-10 w-full sm:w-auto">
@@ -378,7 +408,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                <div className="flex-1 overflow-y-auto p-10 custom-scrollbar bg-slate-50/20">
                   {showOrderReceipt ? (
                      <div className="bg-white p-8 shadow-xl border border-slate-200 mx-auto w-full max-w-[320px] text-black">
-                        {generateReceiptPart(selectedOrder, 'REPRINT COPY')}
+                        {generateReceiptPart(selectedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}
                      </div>
                   ) : (
                     <div className="space-y-8 text-slate-800">

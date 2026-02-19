@@ -566,11 +566,22 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     );
   };
 
-  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    setPrintCopyType(type);
-    setTimeout(() => {
-       window.print();
-    }, 150);
+  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    if (type === 'ALL') {
+        const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
+        for (const copy of sequence) {
+            setPrintCopyType(copy);
+            await new Promise(resolve => setTimeout(resolve, 100));
+            window.print();
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        setPrintCopyType('ALL');
+    } else {
+        setPrintCopyType(type);
+        setTimeout(() => {
+           window.print();
+        }, 150);
+    }
   };
 
   const handleVoidOrder = async () => {
@@ -704,15 +715,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
       <div id="pos-receipt-print-root" className="hidden">
         {completedOrder && (
           <div className="w-[80mm] bg-white">
-             {printCopyType === 'ALL' ? (
-                <>
-                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'CUSTOMER COPY')}</div>
-                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'GATE PASS')}</div>
-                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'STORE COPY')}</div>
-                </>
-             ) : (
-                <div className="receipt-copy">{generateReceiptPart(completedOrder, `${printCopyType} COPY`)}</div>
-             )}
+             <div className="receipt-copy">{generateReceiptPart(completedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}</div>
           </div>
         )}
       </div>
