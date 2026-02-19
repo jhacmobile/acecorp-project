@@ -219,56 +219,65 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden text-slate-900 font-sans">
       <style>{`
         @media print {
-          @page { size: portrait; margin: 10mm; }
-          html, body { height: auto !important; overflow: visible !important; background: white !important; color: black !important; }
-          #root, main, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar { height: auto !important; overflow: visible !important; display: block !important; position: static !important; }
-          .no-print, header, aside, .pagination-controls, button { display: none !important; }
+          @page { size: auto; margin: 0mm; }
           
-          /* Ensure table headers repeat */
-          thead { display: table-header-group; }
-          tr { break-inside: avoid; page-break-inside: avoid; }
+          html, body { 
+            height: auto !important; 
+            overflow: visible !important; 
+            background: white !important; 
+            color: black !important; 
+          }
           
-          /* Report Container - Default Print Mode */
-          #audit-manifest-report-root { 
+          /* Reset layout to allow content to flow */
+          #root, .flex, .flex-col, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar { 
+            height: auto !important; 
+            overflow: visible !important; 
             display: block !important; 
-            width: 100% !important; 
-            position: absolute;
-            top: 0;
-            left: 0;
+            position: static !important; 
+          }
+          
+          /* Hide everything by default using visibility to preserve flow but hide content */
+          body * {
+            visibility: hidden;
+          }
+          
+          /* --- REPORT MODE (Default) --- */
+          body:not(.printing-receipt) #audit-manifest-report-root {
+            visibility: visible !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            display: block !important;
             background: white;
-            z-index: 9999;
+          }
+          body:not(.printing-receipt) #audit-manifest-report-root * {
+            visibility: visible !important;
+          }
+          /* Add margins for the report content itself */
+          body:not(.printing-receipt) #audit-manifest-report-root > div {
+            margin: 10mm;
+          }
+
+          /* --- RECEIPT MODE --- */
+          body.printing-receipt #audit-receipt-print-root {
+            visibility: visible !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 80mm !important;
+            display: block !important;
+            background: white;
+          }
+          body.printing-receipt #audit-receipt-print-root * {
             visibility: visible !important;
           }
           
-          /* Hide everything else when printing report */
-          body:not(.printing-receipt) > *:not(#audit-manifest-report-root) {
-             display: none !important;
-          }
+          /* Explicitly hide the opposing container to prevent interference */
+          body.printing-receipt #audit-manifest-report-root { display: none !important; }
+          body:not(.printing-receipt) #audit-receipt-print-root { display: none !important; }
 
-          /* Receipt Printing Override */
-          #audit-receipt-print-root { 
-            display: none !important; 
-          }
-          
-          body.printing-receipt > * { display: none !important; }
-          body.printing-receipt #audit-receipt-print-root { 
-            display: block !important; 
-            position: absolute !important; 
-            left: 0 !important; 
-            top: 0 !important; 
-            z-index: 9999 !important; 
-            background: white !important; 
-            width: 80mm !important;
-          }
-          body.printing-receipt .receipt-copy { 
-             display: block !important;
-             page-break-after: always !important; 
-             break-after: page !important; 
-             width: 68mm !important;
-             margin: 0 auto !important;
-             position: relative !important;
-             overflow: hidden !important;
-          }
+          .no-print, button, header, aside { display: none !important; }
         }
       `}</style>
 
