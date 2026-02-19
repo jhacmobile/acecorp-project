@@ -228,16 +228,20 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
           thead { display: table-header-group; }
           tr { break-inside: avoid; page-break-inside: avoid; }
           
-          /* Report Container */
+          /* Report Container - Default Print Mode */
           #audit-manifest-report-root { 
             display: block !important; 
             width: 100% !important; 
-            position: static !important;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: white;
+            z-index: 9999;
             visibility: visible !important;
           }
           
           /* Hide everything else when printing report */
-          body > *:not(#audit-manifest-report-root) {
+          body:not(.printing-receipt) > *:not(#audit-manifest-report-root) {
              display: none !important;
           }
 
@@ -245,6 +249,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
           #audit-receipt-print-root { 
             display: none !important; 
           }
+          
           body.printing-receipt > * { display: none !important; }
           body.printing-receipt #audit-receipt-print-root { 
             display: block !important; 

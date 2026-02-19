@@ -224,22 +224,28 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           thead { display: table-header-group; }
           tr { break-inside: avoid; page-break-inside: avoid; }
           
-          /* Report Container */
+          /* Report Container - Default Print Mode */
           #dashboard-all-orders-print-root { 
             display: block !important; 
             width: 100% !important;
             visibility: visible !important;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: white;
+            z-index: 9999;
           }
           
           /* Hide everything else when printing report */
-          body > *:not(#dashboard-all-orders-print-root) {
+          body:not(.printing-receipt) > *:not(#dashboard-all-orders-print-root) {
              display: none !important;
           }
           
           /* Receipt Printing Override */
           #dashboard-receipt-print-root { 
-            display: none !important; /* Default hidden unless targeted */
+            display: none !important; 
           }
+          
           body.printing-receipt > * { display: none !important; }
           body.printing-receipt #dashboard-receipt-print-root { 
             display: block !important; 
