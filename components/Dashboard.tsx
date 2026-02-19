@@ -189,6 +189,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
 
   const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
     if (type === 'ALL') {
+      document.body.classList.add('printing-receipt');
       const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
       for (const copy of sequence) {
          setPrintCopyType(copy); 
@@ -197,8 +198,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
          await new Promise(r => setTimeout(r, 500));
       }
       setPrintCopyType('ALL');
+      document.body.classList.remove('printing-receipt');
     } else {
-      setPrintCopyType(type); setTimeout(() => { window.print(); }, 150);
+      document.body.classList.add('printing-receipt');
+      setPrintCopyType(type); 
+      setTimeout(() => { 
+         window.print(); 
+         document.body.classList.remove('printing-receipt');
+      }, 150);
     }
   };
 
@@ -208,12 +215,33 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden font-sans text-slate-900">
       <style>{`
         @media print {
-          @page { size: portrait; margin: 15mm; }
+          @page { size: portrait; margin: 10mm; }
           html, body { height: auto !important; overflow: visible !important; background: white !important; color: black !important; }
           #root, main, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar { height: auto !important; overflow: visible !important; display: block !important; position: static !important; }
           .no-print, header, aside, .pagination-controls, button { display: none !important; }
-          #dashboard-all-orders-print-root { display: block !important; width: 100% !important; }
+          
+          /* Ensure table headers repeat */
+          thead { display: table-header-group; }
+          tr { break-inside: avoid; page-break-inside: avoid; }
+          
+          /* Report Container */
+          #dashboard-all-orders-print-root { 
+            display: block !important; 
+            width: 100% !important;
+            visibility: visible !important;
+          }
+          
+          /* Hide everything else when printing report */
+          body > *:not(#dashboard-all-orders-print-root) {
+             display: none !important;
+          }
+          
+          /* Receipt Printing Override */
           #dashboard-receipt-print-root { 
+            display: none !important; /* Default hidden unless targeted */
+          }
+          body.printing-receipt > * { display: none !important; }
+          body.printing-receipt #dashboard-receipt-print-root { 
             display: block !important; 
             position: absolute !important; 
             left: 0 !important; 
@@ -222,7 +250,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             background: white !important; 
             width: 80mm !important;
           }
-          .receipt-copy { 
+          body.printing-receipt .receipt-copy { 
              display: block !important;
              page-break-after: always !important; 
              break-after: page !important; 
@@ -233,6 +261,55 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           }
         }
       `}</style>
+
+      {/* FULL SALES REPORT PRINT ROOT */}
+      <div id="dashboard-all-orders-print-root" className="hidden">
+         <div className="p-8">
+            <div className="text-center mb-8 border-b-2 border-black pb-4">
+               <div className="flex justify-center mb-4"><AceCorpLogo customUrl={logoUrl} className="h-16 w-auto" /></div>
+               <h1 className="text-2xl font-black uppercase tracking-widest mb-1">Sales Registry Manifest</h1>
+               <p className="text-xs font-bold uppercase tracking-[0.2em]">{activeStore?.name} — {reportPeriod} Report</p>
+               <p className="text-[10px] font-mono mt-2">Generated: {new Date().toLocaleString()}</p>
+            </div>
+            
+            <div className="grid grid-cols-4 gap-4 mb-8 border-b border-black pb-6">
+               <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Net Inflow</p><p className="text-xl font-black">{formatCurrency(stats.netActualInflow)}</p></div>
+               <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Booked Revenue</p><p className="text-xl font-black">{formatCurrency(stats.bookedRevenue)}</p></div>
+               <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-500">AR Generated</p><p className="text-xl font-black">{formatCurrency(stats.newARGenerated)}</p></div>
+               <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-500">AR Collected</p><p className="text-xl font-black">{formatCurrency(stats.arCollections)}</p></div>
+            </div>
+
+            <table className="w-full text-left text-[10px]">
+               <thead className="border-b-2 border-black">
+                  <tr>
+                     <th className="py-2 uppercase font-black">Time</th>
+                     <th className="py-2 uppercase font-black">Ticket</th>
+                     <th className="py-2 uppercase font-black">Customer</th>
+                     <th className="py-2 uppercase font-black">Operator</th>
+                     <th className="py-2 uppercase font-black text-center">Status</th>
+                     <th className="py-2 uppercase font-black text-right">Amount</th>
+                  </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-200">
+                  {stats.filteredOrders.map(o => (
+                     <tr key={o.id}>
+                        <td className="py-2 font-mono">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                        <td className="py-2 font-mono">#{o.id.slice(-8)}</td>
+                        <td className="py-2 font-bold uppercase">{o.customerName}</td>
+                        <td className="py-2 uppercase">{o.createdBy}</td>
+                        <td className="py-2 text-center uppercase font-bold">{o.status}</td>
+                        <td className="py-2 text-right font-mono font-bold">{formatCurrency(o.totalAmount)}</td>
+                     </tr>
+                  ))}
+               </tbody>
+            </table>
+            
+            <div className="mt-8 pt-4 border-t-2 border-black flex justify-between items-center">
+               <p className="text-[9px] font-bold uppercase">End of Report</p>
+               <p className="text-[9px] font-bold uppercase">Total Records: {stats.filteredOrders.length}</p>
+            </div>
+         </div>
+      </div>
 
       {/* RECEIPT PRINT ROOT */}
       <div id="dashboard-receipt-print-root" className="hidden">
