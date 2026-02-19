@@ -71,14 +71,18 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
   const [auditEnd, setAuditEnd] = useState(getPHDateISO());
 
   const getWeekBounds = () => {
-    const d = new Date();
-    const phDay = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', weekday: 'short' }).format(d);
-    const dayIndices: Record<string, number> = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
-    const currentDayIdx = dayIndices[phDay] ?? d.getDay();
-    const start = new Date(d);
-    start.setDate(d.getDate() - currentDayIdx);
+    const now = new Date();
+    const phDateStr = getPHDateISO(now);
+    const [y, m, d] = phDateStr.split('-').map(Number);
+    const phDate = new Date(Date.UTC(y, m - 1, d));
+    const dayOfWeek = phDate.getUTCDay(); // 0 (Sun) - 6 (Sat)
+    
+    const start = new Date(phDate);
+    start.setUTCDate(phDate.getUTCDate() - dayOfWeek);
+    
     const end = new Date(start);
-    end.setDate(start.getDate() + 6);
+    end.setUTCDate(start.getUTCDate() + 6);
+    
     return { start: getPHDateISO(start), end: getPHDateISO(end) };
   };
 
@@ -149,19 +153,13 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     weekDates.forEach(date => {
       const rec = weekRecords.find(r => r.date === date);
       const status = rec?.status || (rec ? 'REGULAR' : 'ABSENT');
-      if (status !== 'ABSENT') {
-        const win = rec?.timeIn ? timeToMinutes(rec.timeIn) : 0;
-        const wout = rec?.timeOut ? timeToMinutes(rec.timeOut) : 0;
-        const worked = (win && wout) ? (wout - win) : 0;
-        
-        const isHalf = worked >= halfThreshold && worked < (schedMins * 0.8);
-        
-        if (isHalf) presentDays += 0.5;
+      if (status !== 'ABSENT' && rec) {
+        if (rec.isHalfDay) presentDays += 0.5;
         else {
           presentDays += 1;
           if (status === 'REGULAR') {
-            if (rec?.timeIn) totalLate += Math.max(0, win - timeToMinutes(emp.shiftStart));
-            if (rec?.timeOut) totalUT += Math.max(0, timeToMinutes(emp.shiftEnd) - wout);
+            totalLate += rec.lateMinutes || 0;
+            totalUT += rec.undertimeMinutes || 0;
           }
         }
       }
@@ -342,12 +340,14 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     const dates = [];
     const [sy, sm, sd] = payrollStart.split('-').map(Number);
     const [ey, em, ed] = payrollEnd.split('-').map(Number);
-    const curr = new Date(sy, sm - 1, sd, 12, 0, 0);
-    const end = new Date(ey, em - 1, ed, 12, 0, 0);
+    // Use UTC to avoid local timezone shifts when iterating
+    const curr = new Date(Date.UTC(sy, sm - 1, sd, 0, 0, 0));
+    const end = new Date(Date.UTC(ey, em - 1, ed, 0, 0, 0));
+    
     let count = 0;
     while (curr <= end && count < 31) {
       dates.push(getPHDateISO(curr));
-      curr.setDate(curr.getDate() + 1);
+      curr.setUTCDate(curr.getUTCDate() + 1);
       count++;
     }
     return dates;
@@ -525,7 +525,7 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
             </div>
           </div>
           <div className="lg:col-span-3 bg-white rounded-[56px] shadow-sm border border-slate-100 overflow-hidden">
-            <div className="p-10 border-b border-slate-50 flex items-center justify-between bg-[#fcfdfe]"><h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Shift Audit Trail</h2><div className="flex items-center gap-6"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter Window:</label><CustomDatePicker value={auditStart} onChange={setAuditStart} className="w-40" /><span className="text-slate-300 text-xs">→</span><CustomDatePicker value={auditEnd} onChange={setAuditEnd} className="w-40" /></div></div>
+            <div className="p-10 border-b border-slate-50 flex items-center justify-between bg-[#fcfdfe]"><h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Shift Audit Trail</h2><div className="flex items-center gap-6"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter Window:</label><CustomDatePicker value={auditStart} onChange={setAuditStart} className="w-40" /><span className="text-slate-300 text-xs">→</span><CustomDatePicker value={auditEnd} onChange={setAuditEnd} className="w-40" /><select value={auditPersonnelFilter} onChange={e => setAuditPersonnelFilter(e.target.value)} className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black uppercase outline-none focus:border-sky-500"><option value="ALL">ALL PERSONNEL</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div></div>
             <div className="flex-1 overflow-y-auto custom-scrollbar">
               <table className="w-full text-left">
                 <thead className="bg-slate-50 text-[10px] text-slate-400 font-black uppercase tracking-widest border-b border-slate-100"><tr><th className="px-10 py-6">Personnel</th><th className="px-10 py-6">Date / Node</th><th className="px-10 py-6 text-center">Protocol Loop</th><th className="px-10 py-6 text-center">Status Mirror</th><th className="px-10 py-6 text-right">Control</th></tr></thead>
@@ -561,6 +561,7 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">CYCLE END</label><CustomDatePicker value={payrollEnd} onChange={setPayrollEnd} className="w-44" /></div>
                 </div>
                 <div className="flex gap-4">
+                   <button onClick={async () => { await onSync(); alert("Attendance entries synchronized."); }} className="bg-emerald-50 text-emerald-600 px-8 py-5 rounded-[24px] text-[11px] font-black uppercase tracking-widest shadow-sm hover:bg-emerald-100 transition-all">FORCE SYNC</button>
                    <button onClick={handleSaveDraft} className="bg-amber-50 text-[#d97706] px-10 py-5 rounded-[24px] text-[11px] font-black uppercase tracking-widest shadow-sm hover:bg-amber-100 transition-all">SAVE DRAFT</button>
                    <button onClick={triggerFullReportPrint} className="bg-slate-50 text-slate-500 px-10 py-5 rounded-[24px] text-[11px] font-black uppercase tracking-widest shadow-sm hover:bg-slate-100 transition-all">AUDIT REPORT</button>
                    <button onClick={handleApplyPayroll} className="bg-[#0f172a] text-white px-12 py-5 rounded-[24px] text-[11px] font-black uppercase tracking-widest shadow-2xl hover:scale-[1.02] active:scale-95 transition-all">FINALIZE CYCLE</button>
@@ -581,7 +582,7 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
                     <th rowSpan={2} className="px-10 border-l border-slate-100 min-w-[200px] bg-[#111827] text-white italic text-xs">GRAND TOTAL</th>
                   </tr>
                   <tr>
-                    {weekDates.map(d => (<th key={d} className="w-28 py-4 border-l border-slate-200/50"><div>{new Date(d).toLocaleDateString('en-US',{weekday:'short'}).toUpperCase()}</div><div className="text-[8px] text-slate-400 font-bold mt-1">{new Date(d).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit'})}</div></th>))}
+                    {weekDates.map(d => (<th key={d} className="w-28 py-4 border-l border-slate-200/50"><div>{new Date(d).toLocaleDateString('en-US',{weekday:'short', timeZone: 'UTC'}).toUpperCase()}</div><div className="text-[8px] text-slate-400 font-bold mt-1">{new Date(d).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit', timeZone: 'UTC'})}</div></th>))}
                     <th className="px-4 py-4 border-l border-slate-100 text-amber-600">LOAN</th>
                     <th className="px-4 py-4 border-l border-slate-100 text-blue-600">SSS</th>
                     <th className="px-4 py-4 border-l border-slate-100 text-rose-600">VALE</th>

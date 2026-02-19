@@ -159,8 +159,8 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ value, onChange, la
           </div>
 
           <div className="grid grid-cols-7 mb-2">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
-              <div key={d} className="text-center text-[11px] font-black text-slate-800 py-1">{d}</div>
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+              <div key={i} className="text-center text-[11px] font-black text-slate-800 py-1">{d}</div>
             ))}
           </div>
 

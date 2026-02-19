@@ -160,10 +160,10 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     const store = stores.find(s => s.id === order.storeId);
     return (
        <div className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
-          <div className="w-48 h-auto max-h-32 mx-auto mb-0 overflow-hidden flex items-center justify-center">
+          <div className="w-48 h-auto max-h-32 mx-auto mb-4 overflow-hidden flex items-center justify-center">
              <AceCorpLogo customUrl={logoUrl} className="w-full h-auto" />
           </div>
-          <div className="border border-black px-4 py-1 inline-block mb-1">
+          <div className="border border-black px-4 py-1 inline-block mb-2">
              <h3 className="text-[12px] font-black uppercase tracking-widest">{label}</h3>
           </div>
           <h4 className="text-sm font-black uppercase italic leading-none mb-1 text-black">{store?.name || 'ACECORP'}</h4>
