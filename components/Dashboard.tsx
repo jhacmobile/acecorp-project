@@ -20,7 +20,6 @@ interface DashboardProps {
 }
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly';
-type OrderTypeFilter = 'ALL' | 'PICKUP' | 'DELIVERY';
 
 const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, stores, selectedStoreId, receivables, receivablePayments, logoUrl }) => {
   const getPHDateString = (date: Date = new Date()) => {
@@ -47,8 +46,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
   const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('daily');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
   const [paymentFilter, setPaymentFilter] = useState<PaymentMethod | 'ALL'>('ALL');
-  const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showOrderReceipt, setShowOrderReceipt] = useState(false);
   const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
@@ -118,27 +115,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     return { netActualInflow, bookedRevenue, newARGenerated: newARGeneratedTotal, arCollections: arCollectionsTotal, breakdown, orderCount: dailyOrders.length, filteredOrders: dailyOrders, dailyPayments };
   }, [nodeOrders, registryDate, reportPeriod, receivables, receivablePayments, selectedStoreId, orders]);
 
-  useEffect(() => { setCurrentPage(1); }, [selectedStoreId, registryDate, reportPeriod, statusFilter, paymentFilter, orderTypeFilter, searchQuery]);
+  useEffect(() => { setCurrentPage(1); }, [selectedStoreId, registryDate, reportPeriod, statusFilter, paymentFilter]);
 
-  const filteredOrdersForList = useMemo(() => {
-    let base = stats.filteredOrders;
-    if (statusFilter !== 'ALL') base = base.filter(o => o.status === statusFilter);
-    if (paymentFilter !== 'ALL') base = base.filter(o => o.paymentMethod === paymentFilter);
-    if (orderTypeFilter === 'PICKUP') base = base.filter(o => o.customerId === 'PICKUP-CUST');
-    if (orderTypeFilter === 'DELIVERY') base = base.filter(o => o.customerId !== 'PICKUP-CUST');
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      base = base.filter(o => o.customerName.toLowerCase().includes(q) || o.id.toLowerCase().includes(q) || o.createdBy.toLowerCase().includes(q));
-    }
-    return base;
-  }, [stats.filteredOrders, statusFilter, paymentFilter, orderTypeFilter, searchQuery]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredOrdersForList.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(stats.filteredOrders.length / ITEMS_PER_PAGE));
   const paginatedOrders = useMemo(() => {
     const safePage = Math.min(currentPage, totalPages);
     const start = (safePage - 1) * ITEMS_PER_PAGE;
-    return filteredOrdersForList.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredOrdersForList, currentPage, totalPages]);
+    return stats.filteredOrders.slice(start, start + ITEMS_PER_PAGE);
+  }, [stats.filteredOrders, currentPage, totalPages]);
 
   const charts = useMemo(() => {
     let velocityData: { name: string; value: number }[] = [];
@@ -222,42 +206,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     );
   };
 
-  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    if (type === 'ALL') {
-      const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
-      for (const copy of sequence) {
-        setPrintCopyType(copy);
-        document.body.classList.add('printing-receipt');
-        const style = document.createElement('style');
-        style.id = 'receipt-print-style';
-        style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
-        document.head.appendChild(style);
-
-        await new Promise(resolve => setTimeout(resolve, 200));
-        window.print();
-        
-        document.body.classList.remove('printing-receipt');
-        const injectedStyle = document.getElementById('receipt-print-style');
-        if (injectedStyle) injectedStyle.remove();
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-      setPrintCopyType('ALL');
-    } else {
-      document.body.classList.add('printing-receipt');
-      const style = document.createElement('style');
-      style.id = 'receipt-print-style';
-      style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
-      document.head.appendChild(style);
-
-      setPrintCopyType(type); 
-      setTimeout(() => { 
-         window.print(); 
-         document.body.classList.remove('printing-receipt');
-         const injectedStyle = document.getElementById('receipt-print-style');
-         if (injectedStyle) injectedStyle.remove();
-      }, 200);
-    }
+  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    document.body.classList.add('printing-receipt');
+    setPrintCopyType(type); 
+    setTimeout(() => { 
+       window.print(); 
+       document.body.classList.remove('printing-receipt');
+    }, 150);
   };
 
   const COLORS = ['#38bdf8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -266,19 +221,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden font-sans text-slate-900">
       <style>{`
         @media print {
-          @page { size: auto; margin: 10mm; }
+          @page { size: 80mm auto; margin: 0mm; }
           
           html, body { 
             height: auto !important; 
             overflow: visible !important; 
             background: white !important; 
             color: black !important; 
-            display: block !important;
           }
           
-          body { visibility: hidden !important; }
-          .no-print { display: none !important; }
-
           /* Reset layout to allow content to flow */
           #root, .flex, .flex-col, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar { 
             height: auto !important; 
@@ -287,36 +238,28 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             position: static !important; 
           }
           
+          /* Hide everything by default using visibility to preserve flow but hide content */
+          body * {
+            visibility: hidden;
+          }
+          
           /* --- REPORT MODE (Default) --- */
           body:not(.printing-receipt) #dashboard-all-orders-print-root {
             visibility: visible !important;
-            display: block !important;
-            position: relative !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
             width: 100% !important;
+            display: block !important;
             background: white;
-            height: auto !important;
-            overflow: visible !important;
           }
           body:not(.printing-receipt) #dashboard-all-orders-print-root * {
             visibility: visible !important;
           }
           /* Add margins for the report content itself */
           body:not(.printing-receipt) #dashboard-all-orders-print-root > div {
-            margin: 0;
+            margin: 10mm;
           }
-
-          /* Ensure table headers repeat and page breaks work */
-          table { 
-            width: 100% !important; 
-            border-collapse: collapse !important;
-            table-layout: auto !important;
-            page-break-inside: auto !important;
-          }
-          thead { display: table-header-group !important; }
-          tr { page-break-inside: avoid !important; page-break-after: auto !important; }
-          
-          /* Disable flexbox for print if it causes issues with page breaks */
-          .flex, .grid { display: block !important; }
 
           /* --- RECEIPT MODE --- */
           body.printing-receipt #dashboard-receipt-print-root {
@@ -352,7 +295,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           body.printing-receipt #dashboard-all-orders-print-root { display: none !important; }
           body:not(.printing-receipt) #dashboard-receipt-print-root { display: none !important; }
 
-          button, header, aside { display: none !important; }
+          .no-print, button, header, aside { display: none !important; }
         }
       `}</style>
 
@@ -409,12 +352,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
       <div id="dashboard-receipt-print-root" className="hidden">
         {selectedOrder && (
           <div className="w-[80mm] bg-white">
-            <div className="receipt-copy">
-              {generateReceiptPart(
-                selectedOrder, 
-                printCopyType === 'ALL' ? 'CUSTOMER COPY' : (printCopyType === 'GATE' ? 'GATE PASS' : `${printCopyType} COPY`)
-              )}
-            </div>
+             {printCopyType === 'ALL' ? (
+                <>
+                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}</div>
+                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'GATE PASS')}</div>
+                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'STORE COPY')}</div>
+                </>
+             ) : (
+                <div className="receipt-copy">{generateReceiptPart(selectedOrder, `${printCopyType} COPY`)}</div>
+             )}
           </div>
         )}
       </div>
@@ -528,7 +474,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
          </div>
 
          <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 overflow-hidden flex flex-col min-h-[500px]">
-            <div className="px-10 py-8 border-b border-slate-50 flex flex-col lg:flex-row justify-between items-start lg:items-center shrink-0 gap-6">
+            <div className="px-10 py-8 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center shrink-0 gap-6">
                <div className="flex items-center gap-6">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registry Manifest Ledger</span>
                   <div className="flex items-center bg-sky-50 border-2 border-sky-200 rounded-full px-4 py-1.5 shadow-sm">
@@ -537,25 +483,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                      <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="text-sky-600 hover:text-sky-800 disabled:opacity-30 p-1"><i className="fas fa-chevron-right text-[10px]"></i></button>
                   </div>
                </div>
-               <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                  <div className="relative flex-1 sm:flex-none sm:w-64">
-                     <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 text-[10px]"></i>
-                     <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search Ticket/Customer..." className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold uppercase outline-none focus:bg-white focus:border-sky-400 transition-all" />
-                  </div>
-                  <select value={orderTypeFilter} onChange={e => setOrderTypeFilter(e.target.value as any)} className="px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black uppercase outline-none focus:border-sky-400 transition-all">
-                     <option value="ALL">All Types</option>
-                     <option value="PICKUP">Pickup</option>
-                     <option value="DELIVERY">Delivery</option>
-                  </select>
-                  <select value={paymentFilter} onChange={e => setPaymentFilter(e.target.value as any)} className="px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black uppercase outline-none focus:border-sky-400 transition-all">
-                     <option value="ALL">All Payments</option>
-                     <option value="CASH">Cash</option>
-                     <option value="GCASH">GCash</option>
-                     <option value="MAYA">Maya</option>
-                     <option value="BANK">Bank</option>
-                  </select>
-                  <button onClick={() => window.print()} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center gap-2 hover:bg-slate-800 transition-all active:scale-95"><i className="fas fa-print"></i> Generate Full Registry</button>
-               </div>
+               <button onClick={() => window.print()} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center gap-2 hover:bg-slate-800 transition-all active:scale-95"><i className="fas fa-print"></i> Generate Full Registry</button>
             </div>
             <div className="flex-1 overflow-x-auto custom-scrollbar">
                <table className="w-full text-left min-w-[1000px]">
@@ -642,7 +570,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                         <button onClick={() => handlePrintRequest('STORE')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'STORE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Store</button>
                         <button onClick={() => handlePrintRequest('ALL')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'ALL' ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-900 border-slate-200'}`}>ALL</button>
                     </div>
-                    <button onClick={() => handlePrintRequest(printCopyType)} className="py-5 bg-sky-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Reprint</button>
+                    <button onClick={() => handlePrintRequest('ALL')} className="py-5 bg-sky-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Reprint</button>
                   </div>
                   <button onClick={() => setSelectedOrder(null)} className="w-full py-4 text-slate-400 font-black uppercase text-[10px] active:scale-95">Dismiss detailed view</button>
                </div>
