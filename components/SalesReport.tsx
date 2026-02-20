@@ -262,6 +262,14 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
           
           body { visibility: hidden !important; }
           .no-print { display: none !important; }
+
+          /* Reset layout to allow content to flow */
+          #root, .flex, .flex-col, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar { 
+            height: auto !important; 
+            overflow: visible !important; 
+            display: block !important; 
+            position: static !important; 
+          }
           
           /* --- REPORT MODE (Default) --- */
           body:not(.printing-receipt) #audit-manifest-report-root {
@@ -608,7 +616,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                         <button onClick={() => handlePrintRequest('STORE')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'STORE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Store</button>
                         <button onClick={() => handlePrintRequest('ALL')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'ALL' ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-900 border-slate-200'}`}>ALL</button>
                     </div>
-                    <button onClick={() => handlePrintRequest('ALL')} className="py-5 bg-sky-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Reprint</button>
+                    <button onClick={() => handlePrintRequest(printCopyType)} className="py-5 bg-sky-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Reprint</button>
                   </div>
                   <button onClick={() => setSelectedOrder(null)} className="w-full py-4 text-slate-400 font-black uppercase text-[10px] active:scale-95">Dismiss detailed view</button>
                </div>
