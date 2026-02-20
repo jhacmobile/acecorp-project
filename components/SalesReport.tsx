@@ -17,7 +17,8 @@ interface SalesProps {
 }
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly';
-type AuditMode = 'SALES' | 'AR_COLLECTION';
+type AuditMode = 'SALES' | 'AR_COLLECTION' | 'HISTORY';
+type OrderTypeFilter = 'ALL' | 'PICKUP' | 'DELIVERY';
 
 const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, receivablePayments, logoUrl }) => {
   const getPHDateString = (date: Date = new Date()) => {
@@ -44,6 +45,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
   const [auditMode, setAuditMode] = useState<AuditMode>('SALES');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
   const [paymentFilter, setPaymentFilter] = useState<PaymentMethod | 'ALL'>('ALL');
+  const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showOrderReceipt, setShowOrderReceipt] = useState(false);
@@ -126,23 +128,26 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     return { netActualInflow, bookedRevenue, newARGenerated: newARGeneratedTotal, arCollections: arCollectionsTotal, breakdown, dailyOrders, dailyPayments };
   }, [nodeOrders, date, reportPeriod, receivables, receivablePayments, user.selectedStoreId, orders]);
 
-  useEffect(() => { setCurrentPage(1); }, [date, reportPeriod, auditMode, statusFilter, paymentFilter, searchQuery]);
+  useEffect(() => { setCurrentPage(1); }, [date, reportPeriod, auditMode, statusFilter, paymentFilter, orderTypeFilter, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(stats.dailyOrders.length / ITEMS_PER_PAGE));
   const arTotalPages = Math.max(1, Math.ceil(stats.dailyPayments.length / ITEMS_PER_PAGE));
   const currentTotalPages = auditMode === 'SALES' ? totalPages : arTotalPages;
 
   const paginatedOrders = useMemo(() => {
-    let base = stats.dailyOrders;
+    let base = auditMode === 'HISTORY' ? nodeOrders : stats.dailyOrders;
     if (statusFilter !== 'ALL') base = base.filter(o => o.status === statusFilter);
     if (paymentFilter !== 'ALL') base = base.filter(o => o.paymentMethod === paymentFilter);
+    if (orderTypeFilter === 'PICKUP') base = base.filter(o => o.customerId === 'PICKUP-CUST');
+    if (orderTypeFilter === 'DELIVERY') base = base.filter(o => o.customerId !== 'PICKUP-CUST');
+    
     if (searchQuery) {
         const q = searchQuery.toLowerCase();
         base = base.filter(o => o.customerName.toLowerCase().includes(q) || o.id.toLowerCase().includes(q) || o.createdBy.toLowerCase().includes(q));
     }
     const safePage = Math.min(currentPage, Math.ceil(base.length / ITEMS_PER_PAGE) || 1);
     return base.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
-  }, [stats.dailyOrders, currentPage, statusFilter, paymentFilter, searchQuery]);
+  }, [stats.dailyOrders, nodeOrders, currentPage, statusFilter, paymentFilter, orderTypeFilter, searchQuery, auditMode]);
 
   const paginatedAR = useMemo(() => {
     const data = stats.dailyPayments.map(p => {
@@ -473,30 +478,67 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                      <div className="grid grid-cols-1 gap-2 p-1.5 bg-slate-50 rounded-[24px] border border-slate-100">
                         <button onClick={() => setAuditMode('SALES')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'SALES' ? 'bg-slate-400 text-white shadow-lg italic' : 'text-slate-400 hover:text-slate-600'}`}>Sales Registry</button>
                         <button onClick={() => setAuditMode('AR_COLLECTION')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'AR_COLLECTION' ? 'bg-slate-400 text-white shadow-lg italic' : 'text-slate-400 hover:text-slate-600'}`}>AR Collections</button>
+                        <button onClick={() => setAuditMode('HISTORY')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'HISTORY' ? 'bg-slate-400 text-white shadow-lg italic' : 'text-slate-400 hover:text-slate-600'}`}>Order History</button>
                      </div>
                   </div>
 
-                  {/* Period Selector - NEW Feature */}
-                  <div className="space-y-4">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Timeframe Protocol</label>
-                     <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100">
-                        {(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (
-                          <button 
-                            key={p} 
-                            onClick={() => setReportPeriod(p)} 
-                            className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${reportPeriod === p ? 'bg-white text-sky-600 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
-                          >
-                            {p}
-                          </button>
-                        ))}
-                     </div>
-                  </div>
+                  {auditMode !== 'HISTORY' && (
+                    <div className="space-y-10 animate-in fade-in slide-in-from-top-2">
+                       {/* Period Selector - NEW Feature */}
+                       <div className="space-y-4">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Timeframe Protocol</label>
+                          <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100">
+                             {(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (
+                               <button 
+                                 key={p} 
+                                 onClick={() => setReportPeriod(p)} 
+                                 className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${reportPeriod === p ? 'bg-white text-sky-600 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                               >
+                                 {p}
+                               </button>
+                             ))}
+                          </div>
+                       </div>
 
-                  {/* Reference Date Picker */}
-                  <div className="space-y-4">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Reference Date</label>
-                    <CustomDatePicker value={date} onChange={setDate} className="w-full shadow-sm" />
-                  </div>
+                       {/* Reference Date Picker */}
+                       <div className="space-y-4">
+                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Reference Date</label>
+                         <CustomDatePicker value={date} onChange={setDate} className="w-full shadow-sm" />
+                       </div>
+                    </div>
+                  )}
+
+                  {auditMode === 'HISTORY' && (
+                    <div className="space-y-10 animate-in fade-in slide-in-from-top-2">
+                       <div className="space-y-4">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Order Type</label>
+                          <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100">
+                             {(['ALL', 'PICKUP', 'DELIVERY'] as OrderTypeFilter[]).map(t => (
+                               <button key={t} onClick={() => setOrderTypeFilter(t)} className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${orderTypeFilter === t ? 'bg-white text-sky-600 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>{t}</button>
+                             ))}
+                          </div>
+                       </div>
+                       <div className="space-y-4">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Payment Filter</label>
+                          <select value={paymentFilter} onChange={e => setPaymentFilter(e.target.value as any)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-black uppercase outline-none focus:border-sky-400 transition-all">
+                             <option value="ALL">All Methods</option>
+                             <option value="CASH">Cash</option>
+                             <option value="GCASH">GCash</option>
+                             <option value="MAYA">Maya</option>
+                             <option value="BANK">Bank</option>
+                          </select>
+                       </div>
+                       <div className="space-y-4">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Status Filter</label>
+                          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-black uppercase outline-none focus:border-sky-400 transition-all">
+                             <option value="ALL">All Status</option>
+                             <option value={OrderStatus.ORDERED}>Ordered</option>
+                             <option value={OrderStatus.RECEIVABLE}>Receivable</option>
+                             <option value={OrderStatus.CANCELLED}>Cancelled</option>
+                          </select>
+                       </div>
+                    </div>
+                  )}
                </div>
             </div>
          </aside>

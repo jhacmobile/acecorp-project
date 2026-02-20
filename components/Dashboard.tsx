@@ -20,6 +20,7 @@ interface DashboardProps {
 }
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly';
+type OrderTypeFilter = 'ALL' | 'PICKUP' | 'DELIVERY';
 
 const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, stores, selectedStoreId, receivables, receivablePayments, logoUrl }) => {
   const getPHDateString = (date: Date = new Date()) => {
@@ -46,6 +47,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
   const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('daily');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
   const [paymentFilter, setPaymentFilter] = useState<PaymentMethod | 'ALL'>('ALL');
+  const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showOrderReceipt, setShowOrderReceipt] = useState(false);
   const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
@@ -115,14 +118,27 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     return { netActualInflow, bookedRevenue, newARGenerated: newARGeneratedTotal, arCollections: arCollectionsTotal, breakdown, orderCount: dailyOrders.length, filteredOrders: dailyOrders, dailyPayments };
   }, [nodeOrders, registryDate, reportPeriod, receivables, receivablePayments, selectedStoreId, orders]);
 
-  useEffect(() => { setCurrentPage(1); }, [selectedStoreId, registryDate, reportPeriod, statusFilter, paymentFilter]);
+  useEffect(() => { setCurrentPage(1); }, [selectedStoreId, registryDate, reportPeriod, statusFilter, paymentFilter, orderTypeFilter, searchQuery]);
 
-  const totalPages = Math.max(1, Math.ceil(stats.filteredOrders.length / ITEMS_PER_PAGE));
+  const filteredOrdersForList = useMemo(() => {
+    let base = stats.filteredOrders;
+    if (statusFilter !== 'ALL') base = base.filter(o => o.status === statusFilter);
+    if (paymentFilter !== 'ALL') base = base.filter(o => o.paymentMethod === paymentFilter);
+    if (orderTypeFilter === 'PICKUP') base = base.filter(o => o.customerId === 'PICKUP-CUST');
+    if (orderTypeFilter === 'DELIVERY') base = base.filter(o => o.customerId !== 'PICKUP-CUST');
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      base = base.filter(o => o.customerName.toLowerCase().includes(q) || o.id.toLowerCase().includes(q) || o.createdBy.toLowerCase().includes(q));
+    }
+    return base;
+  }, [stats.filteredOrders, statusFilter, paymentFilter, orderTypeFilter, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrdersForList.length / ITEMS_PER_PAGE));
   const paginatedOrders = useMemo(() => {
     const safePage = Math.min(currentPage, totalPages);
     const start = (safePage - 1) * ITEMS_PER_PAGE;
-    return stats.filteredOrders.slice(start, start + ITEMS_PER_PAGE);
-  }, [stats.filteredOrders, currentPage, totalPages]);
+    return filteredOrdersForList.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredOrdersForList, currentPage, totalPages]);
 
   const charts = useMemo(() => {
     let velocityData: { name: string; value: number }[] = [];
@@ -512,7 +528,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
          </div>
 
          <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 overflow-hidden flex flex-col min-h-[500px]">
-            <div className="px-10 py-8 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center shrink-0 gap-6">
+            <div className="px-10 py-8 border-b border-slate-50 flex flex-col lg:flex-row justify-between items-start lg:items-center shrink-0 gap-6">
                <div className="flex items-center gap-6">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registry Manifest Ledger</span>
                   <div className="flex items-center bg-sky-50 border-2 border-sky-200 rounded-full px-4 py-1.5 shadow-sm">
@@ -521,7 +537,25 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                      <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="text-sky-600 hover:text-sky-800 disabled:opacity-30 p-1"><i className="fas fa-chevron-right text-[10px]"></i></button>
                   </div>
                </div>
-               <button onClick={() => window.print()} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center gap-2 hover:bg-slate-800 transition-all active:scale-95"><i className="fas fa-print"></i> Generate Full Registry</button>
+               <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                  <div className="relative flex-1 sm:flex-none sm:w-64">
+                     <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 text-[10px]"></i>
+                     <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search Ticket/Customer..." className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold uppercase outline-none focus:bg-white focus:border-sky-400 transition-all" />
+                  </div>
+                  <select value={orderTypeFilter} onChange={e => setOrderTypeFilter(e.target.value as any)} className="px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black uppercase outline-none focus:border-sky-400 transition-all">
+                     <option value="ALL">All Types</option>
+                     <option value="PICKUP">Pickup</option>
+                     <option value="DELIVERY">Delivery</option>
+                  </select>
+                  <select value={paymentFilter} onChange={e => setPaymentFilter(e.target.value as any)} className="px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black uppercase outline-none focus:border-sky-400 transition-all">
+                     <option value="ALL">All Payments</option>
+                     <option value="CASH">Cash</option>
+                     <option value="GCASH">GCash</option>
+                     <option value="MAYA">Maya</option>
+                     <option value="BANK">Bank</option>
+                  </select>
+                  <button onClick={() => window.print()} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center gap-2 hover:bg-slate-800 transition-all active:scale-95"><i className="fas fa-print"></i> Generate Full Registry</button>
+               </div>
             </div>
             <div className="flex-1 overflow-x-auto custom-scrollbar">
                <table className="w-full text-left min-w-[1000px]">
