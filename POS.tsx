@@ -567,11 +567,24 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     );
   };
 
-  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    setPrintCopyType(type);
-    setTimeout(() => {
-       window.print();
-    }, 150);
+  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    if (type === 'ALL') {
+      const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
+      for (const copy of sequence) {
+        setPrintCopyType(copy);
+        // Wait for state update and DOM render
+        await new Promise(resolve => setTimeout(resolve, 200));
+        window.print();
+        // Small delay between print jobs to ensure printer handles them separately
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      setPrintCopyType('ALL');
+    } else {
+      setPrintCopyType(type);
+      setTimeout(() => {
+        window.print();
+      }, 200);
+    }
   };
 
   const handleVoidOrder = async () => {
@@ -702,15 +715,12 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
       <div id="pos-receipt-print-root" className="hidden">
         {completedOrder && (
           <div className="w-[80mm] bg-white">
-             {printCopyType === 'ALL' ? (
-                <>
-                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'CUSTOMER COPY')}</div>
-                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'GATE PASS')}</div>
-                  <div className="receipt-copy">{generateReceiptPart(completedOrder, 'STORE COPY')}</div>
-                </>
-             ) : (
-                <div className="receipt-copy">{generateReceiptPart(completedOrder, `${printCopyType} COPY`)}</div>
-             )}
+            <div className="receipt-copy">
+              {generateReceiptPart(
+                completedOrder, 
+                printCopyType === 'ALL' ? 'CUSTOMER COPY' : (printCopyType === 'GATE' ? 'GATE PASS' : `${printCopyType} COPY`)
+              )}
+            </div>
           </div>
         )}
       </div>

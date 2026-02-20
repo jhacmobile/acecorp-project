@@ -205,20 +205,42 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     );
   };
 
-  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    document.body.classList.add('printing-receipt');
-    const style = document.createElement('style');
-    style.id = 'receipt-print-style';
-    style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
-    document.head.appendChild(style);
+  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    if (type === 'ALL') {
+      const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
+      for (const copy of sequence) {
+        setPrintCopyType(copy);
+        document.body.classList.add('printing-receipt');
+        const style = document.createElement('style');
+        style.id = 'receipt-print-style';
+        style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
+        document.head.appendChild(style);
 
-    setPrintCopyType(type); 
-    setTimeout(() => { 
-       window.print(); 
-       document.body.classList.remove('printing-receipt');
-       const injectedStyle = document.getElementById('receipt-print-style');
-       if (injectedStyle) injectedStyle.remove();
-    }, 150);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        window.print();
+        
+        document.body.classList.remove('printing-receipt');
+        const injectedStyle = document.getElementById('receipt-print-style');
+        if (injectedStyle) injectedStyle.remove();
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      setPrintCopyType('ALL');
+    } else {
+      document.body.classList.add('printing-receipt');
+      const style = document.createElement('style');
+      style.id = 'receipt-print-style';
+      style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
+      document.head.appendChild(style);
+
+      setPrintCopyType(type); 
+      setTimeout(() => { 
+         window.print(); 
+         document.body.classList.remove('printing-receipt');
+         const injectedStyle = document.getElementById('receipt-print-style');
+         if (injectedStyle) injectedStyle.remove();
+      }, 200);
+    }
   };
 
   const activeStore = stores.find(s => s.id === user.selectedStoreId);
@@ -228,13 +250,14 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden text-slate-900 font-sans">
       <style>{`
         @media print {
-          @page { size: auto; margin: 0mm; }
+          @page { size: auto; margin: 10mm; }
           
           html, body { 
             height: auto !important; 
             overflow: visible !important; 
             background: white !important; 
             color: black !important; 
+            display: block !important;
           }
           
           body { visibility: hidden !important; }
@@ -244,19 +267,32 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
           body:not(.printing-receipt) #audit-manifest-report-root {
             visibility: visible !important;
             display: block !important;
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
+            position: relative !important;
             width: 100% !important;
             background: white;
+            height: auto !important;
+            overflow: visible !important;
           }
           body:not(.printing-receipt) #audit-manifest-report-root * {
             visibility: visible !important;
           }
           /* Add margins for the report content itself */
           body:not(.printing-receipt) #audit-manifest-report-root > div {
-            margin: 10mm;
+            margin: 0;
           }
+
+          /* Ensure table headers repeat and page breaks work */
+          table { 
+            width: 100% !important; 
+            border-collapse: collapse !important;
+            table-layout: auto !important;
+            page-break-inside: auto !important;
+          }
+          thead { display: table-header-group !important; }
+          tr { page-break-inside: avoid !important; page-break-after: auto !important; }
+          
+          /* Disable flexbox for print if it causes issues with page breaks */
+          .flex, .grid { display: block !important; }
 
           /* --- RECEIPT MODE --- */
           body.printing-receipt #audit-receipt-print-root {
@@ -366,15 +402,12 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
       <div id="audit-receipt-print-root" className="hidden">
         {selectedOrder && (
           <div className="w-[80mm] bg-white">
-             {printCopyType === 'ALL' ? (
-                <>
-                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}</div>
-                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'GATE PASS')}</div>
-                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'STORE COPY')}</div>
-                </>
-             ) : (
-                <div className="receipt-copy">{generateReceiptPart(selectedOrder, `${printCopyType} COPY`)}</div>
-             )}
+            <div className="receipt-copy">
+              {generateReceiptPart(
+                selectedOrder, 
+                printCopyType === 'ALL' ? 'CUSTOMER COPY' : (printCopyType === 'GATE' ? 'GATE PASS' : `${printCopyType} COPY`)
+              )}
+            </div>
           </div>
         )}
       </div>
