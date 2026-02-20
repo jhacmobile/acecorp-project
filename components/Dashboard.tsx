@@ -208,10 +208,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
 
   const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
     document.body.classList.add('printing-receipt');
+    const style = document.createElement('style');
+    style.id = 'receipt-print-style';
+    style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
+    document.head.appendChild(style);
+
     setPrintCopyType(type); 
     setTimeout(() => { 
        window.print(); 
        document.body.classList.remove('printing-receipt');
+       const injectedStyle = document.getElementById('receipt-print-style');
+       if (injectedStyle) injectedStyle.remove();
     }, 150);
   };
 
@@ -221,7 +228,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden font-sans text-slate-900">
       <style>{`
         @media print {
-          @page { size: 80mm auto; margin: 0mm; }
+          @page { size: auto; margin: 0mm; }
           
           html, body { 
             height: auto !important; 
@@ -230,27 +237,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             color: black !important; 
           }
           
-          /* Reset layout to allow content to flow */
-          #root, .flex, .flex-col, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar { 
-            height: auto !important; 
-            overflow: visible !important; 
-            display: block !important; 
-            position: static !important; 
-          }
-          
-          /* Hide everything by default using visibility to preserve flow but hide content */
-          body * {
-            visibility: hidden;
-          }
+          body { visibility: hidden !important; }
+          .no-print { display: none !important; }
           
           /* --- REPORT MODE (Default) --- */
           body:not(.printing-receipt) #dashboard-all-orders-print-root {
             visibility: visible !important;
+            display: block !important;
             position: absolute !important;
             top: 0 !important;
             left: 0 !important;
             width: 100% !important;
-            display: block !important;
             background: white;
           }
           body:not(.printing-receipt) #dashboard-all-orders-print-root * {
@@ -295,7 +292,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           body.printing-receipt #dashboard-all-orders-print-root { display: none !important; }
           body:not(.printing-receipt) #dashboard-receipt-print-root { display: none !important; }
 
-          .no-print, button, header, aside { display: none !important; }
+          button, header, aside { display: none !important; }
         }
       `}</style>
 
