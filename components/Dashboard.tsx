@@ -161,16 +161,22 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     const store = stores.find(s => s.id === order.storeId);
     return (
        <div className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
-          <div className="w-48 h-auto max-h-32 mx-auto mb-4 overflow-hidden flex items-center justify-center"><AceCorpLogo customUrl={logoUrl} className="w-full h-auto" /></div>
-          <div className="border border-black px-4 py-1 inline-block mb-2"><h3 className="text-[12px] font-black uppercase tracking-widest">{label}</h3></div>
+          <div className="w-48 h-auto max-h-32 mx-auto mb-0 overflow-hidden flex items-center justify-center">
+             <AceCorpLogo customUrl={logoUrl} className="w-full h-auto" />
+          </div>
+          <div className="border border-black px-4 py-1 inline-block mb-1">
+             <h3 className="text-[12px] font-black uppercase tracking-widest">{label}</h3>
+          </div>
           <h4 className="text-sm font-black uppercase italic leading-none mb-1 text-black">{store?.name || 'ACECORP'}</h4>
           <p className="text-[10px] uppercase font-bold leading-tight text-black">{store?.address || ''}</p>
+          <p className="text-[10px] uppercase font-bold text-black">{store?.mobile || ''}</p>
           <div className="border-b border-black border-dashed my-2"></div>
           <div className="text-left font-bold space-y-1 uppercase text-[10px] text-black">
              <div className="flex justify-between"><span>Ref:</span> <span>{order.id.slice(-8)}</span></div>
              <div className="flex justify-between"><span>Date:</span> <span>{new Date(order.createdAt).toLocaleDateString()}</span></div>
              <div className="flex justify-between"><span>Operator:</span> <span>{order.createdBy}</span></div>
-             <div className="pt-1"><p className="font-black text-[11px] uppercase italic text-black">{order.customerName}</p></div>
+             {order.riderName && <div className="flex justify-between"><span>Rider:</span> <span>{order.riderName}</span></div>}
+             <div className="pt-1"><p className="font-black text-[11px] uppercase italic text-black">{order.customerName}</p><p className="text-black">{order.address}</p></div>
           </div>
           <div className="border-b border-black border-dashed my-2"></div>
           <div className="space-y-2 mb-4">
@@ -179,34 +185,34 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
              ))}
           </div>
           <div className="border-b border-black border-dashed my-2"></div>
+          <div className="flex justify-between font-bold uppercase mb-1 text-[10px] text-black"><span>Method:</span> <span>{order.paymentMethod}</span></div>
+          {order.totalDiscount > 0 && (
+              <div className="flex justify-between font-bold uppercase mb-1 text-[10px] text-black"><span>Discount:</span> <span>-₱{formatCurrency(order.totalDiscount).replace('₱','')}</span></div>
+          )}
           <div className="flex justify-between text-[14px] font-black italic uppercase text-black"><span>TOTAL:</span> <span>₱{formatCurrency(order.totalAmount).replace('₱','')}</span></div>
+          
           <div className="mt-6 pt-2 border-t border-black border-dashed text-center text-black space-y-2">
               <p className="font-black uppercase text-[10px]">Thank you for choosing AceCorp!</p>
+              <div className="pt-6 pb-2">
+                  <p className="text-[10px] text-left border-b border-black inline-block w-full text-white">_</p>
+                  <p className="text-[9px] text-center font-black uppercase mt-1">CUSTOMER SIGNATURE</p>
+              </div>
+          </div>
+          <div className="mt-4 pt-2 border-t border-black border-dashed text-center text-black">
+              <p className="font-bold uppercase text-[9px]">OFFICIAL REGISTRY COPY</p>
+              <p className="font-bold uppercase text-[8px] mt-1">System Timestamp: {new Date().toLocaleTimeString()}</p>
           </div>
        </div>
     );
   };
 
-  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    if (type === 'ALL') {
-      document.body.classList.add('printing-receipt');
-      const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
-      for (const copy of sequence) {
-         setPrintCopyType(copy); 
-         await new Promise(r => setTimeout(r, 100)); 
-         window.print();
-         await new Promise(r => setTimeout(r, 500));
-      }
-      setPrintCopyType('ALL');
-      document.body.classList.remove('printing-receipt');
-    } else {
-      document.body.classList.add('printing-receipt');
-      setPrintCopyType(type); 
-      setTimeout(() => { 
-         window.print(); 
-         document.body.classList.remove('printing-receipt');
-      }, 150);
-    }
+  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    document.body.classList.add('printing-receipt');
+    setPrintCopyType(type); 
+    setTimeout(() => { 
+       window.print(); 
+       document.body.classList.remove('printing-receipt');
+    }, 150);
   };
 
   const COLORS = ['#38bdf8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -215,7 +221,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden font-sans text-slate-900">
       <style>{`
         @media print {
-          @page { size: auto; margin: 0mm; }
+          @page { size: 80mm auto; margin: 0mm; }
           
           html, body { 
             height: auto !important; 
@@ -258,17 +264,33 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           /* --- RECEIPT MODE --- */
           body.printing-receipt #dashboard-receipt-print-root {
             visibility: visible !important;
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 80mm !important;
             display: block !important;
-            background: white;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 80mm !important; 
+            height: auto !important; 
+            min-height: 0 !important;
+            padding: 0 !important; 
+            margin: 0 !important; 
+            background: white !important; 
+            color: black !important; 
+            z-index: 9999 !important;
           }
           body.printing-receipt #dashboard-receipt-print-root * {
             visibility: visible !important;
           }
           
+          .receipt-copy { 
+             display: block !important;
+             page-break-after: always !important; 
+             break-after: page !important; 
+             width: 68mm !important;
+             margin: 0 auto !important;
+             position: relative !important;
+             overflow: hidden !important;
+          }
+
           /* Explicitly hide the opposing container to prevent interference */
           body.printing-receipt #dashboard-all-orders-print-root { display: none !important; }
           body:not(.printing-receipt) #dashboard-receipt-print-root { display: none !important; }
@@ -330,7 +352,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
       <div id="dashboard-receipt-print-root" className="hidden">
         {selectedOrder && (
           <div className="w-[80mm] bg-white">
-             <div className="receipt-copy">{generateReceiptPart(selectedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}</div>
+             {printCopyType === 'ALL' ? (
+                <>
+                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}</div>
+                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'GATE PASS')}</div>
+                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'STORE COPY')}</div>
+                </>
+             ) : (
+                <div className="receipt-copy">{generateReceiptPart(selectedOrder, `${printCopyType} COPY`)}</div>
+             )}
           </div>
         )}
       </div>
