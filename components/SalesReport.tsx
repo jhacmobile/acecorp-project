@@ -270,32 +270,14 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
             padding: 0 !important;
           }
           
-          body { visibility: hidden !important; }
-
-          /* Reset ALL potential parent containers to allow natural height and overflow */
-          #root, 
-          div[class*="flex"], 
-          div[class*="h-screen"], 
-          div[class*="overflow-hidden"], 
-          main, 
-          section { 
-            height: auto !important; 
-            min-height: 0 !important;
-            max-height: none !important;
-            overflow: visible !important; 
-            display: block !important; 
-            position: static !important; 
-            margin: 0 !important;
-            padding: 0 !important;
-          }
+          /* Hide the main app container completely */
+          #root { display: none !important; }
           
-          /* --- REPORT MODE --- */
-          body:not(.printing-receipt) #audit-manifest-report-root {
-            visibility: visible !important;
+          /* Show only the print roots which are now direct children of body */
+          body > #audit-manifest-report-root,
+          body > #audit-receipt-print-root {
             display: block !important;
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
+            position: static !important;
             width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
@@ -303,8 +285,6 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
             height: auto !important;
             min-height: 0 !important;
             overflow: visible !important;
-          }
-          body:not(.printing-receipt) #audit-manifest-report-root * {
             visibility: visible !important;
           }
 
@@ -323,22 +303,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
           
           /* --- RECEIPT MODE --- */
           body.printing-receipt #audit-receipt-print-root {
-            visibility: visible !important;
-            display: block !important;
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
             width: 80mm !important; 
-            height: auto !important; 
-            min-height: 0 !important;
-            padding: 0 !important; 
-            margin: 0 !important; 
-            background: white !important; 
-            color: black !important; 
-            z-index: 9999 !important;
-          }
-          body.printing-receipt #audit-receipt-print-root * {
-            visibility: visible !important;
           }
           
           .receipt-copy { 
@@ -356,143 +321,149 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
         }
       `}</style>
 
-      {/* FULL AUDIT REPORT PRINT ROOT */}
-      <div id="audit-manifest-report-root" className="hidden">
-         <div className="p-0 bg-white relative">
-            {/* Professional Watermark */}
-            <div className="absolute inset-0 flex items-center justify-center opacity-[0.02] pointer-events-none select-none overflow-hidden">
-               <h1 className="text-[140px] font-black uppercase -rotate-45 whitespace-nowrap">ACECORP OFFICIAL</h1>
+      {/* FULL AUDIT REPORT PRINT ROOT - Moved to Portal */}
+      {createPortal(
+        <div id="audit-manifest-report-root" className="hidden">
+           <div className="p-0 bg-white relative">
+              {/* Professional Watermark */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-[0.02] pointer-events-none select-none overflow-hidden">
+                 <h1 className="text-[140px] font-black uppercase -rotate-45 whitespace-nowrap">ACECORP OFFICIAL</h1>
+              </div>
+
+              <div className="relative z-10">
+                 <div className="flex justify-between items-start mb-10 border-b-4 border-slate-950 pb-6">
+                    <div className="flex items-center gap-6">
+                       <div className="w-20 h-20 bg-slate-950 rounded-2xl flex items-center justify-center p-4 shadow-xl">
+                          <AceCorpLogo customUrl={logoUrl} className="w-full h-full" inverted />
+                       </div>
+                       <div>
+                          <h1 className="text-4xl font-black uppercase italic tracking-tighter text-slate-950 leading-none">AceCorp Enterprise</h1>
+                          <p className="text-[10px] font-black text-sky-600 uppercase tracking-[0.4em] mt-2">Internal Audit & Compliance Division</p>
+                       </div>
+                    </div>
+                    <div className="text-right">
+                       <div className="inline-block px-4 py-1 bg-slate-950 text-white text-[10px] font-black uppercase tracking-widest mb-2">
+                          {auditMode === 'SALES' ? 'Sales Registry' : (auditMode === 'HISTORY' ? 'Order History' : 'AR Collection')} Manifest
+                       </div>
+                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Document ID: {Math.random().toString(36).substring(2, 15).toUpperCase()}</p>
+                       <p className="text-[10px] font-mono text-slate-400 mt-1">TS: {new Date().toISOString()}</p>
+                    </div>
+                 </div>
+
+                 <div className="flex justify-between mb-10 gap-12">
+                    <div className="flex-1 space-y-2">
+                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Node Identification</p>
+                       <p className="text-lg font-black uppercase italic text-slate-900">{activeStore?.name}</p>
+                       <p className="text-[10px] font-bold text-slate-500 uppercase">{activeStore?.address}</p>
+                    </div>
+                    <div className="text-right space-y-2">
+                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Reporting Window</p>
+                       <p className="text-lg font-black uppercase italic text-slate-900">{reportPeriod} Perspective</p>
+                       <p className="text-[10px] font-bold text-slate-500 uppercase">Reference Date: {date}</p>
+                    </div>
+                 </div>
+                 
+                 <div className="flex gap-4 mb-10 bg-slate-50 p-8 rounded-[32px] border border-slate-200 shadow-inner">
+                    <div className="flex-1 border-r border-slate-200 pr-4">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Net Inflow</p>
+                       <p className="text-2xl font-black italic text-slate-950">{formatCurrency(stats.netActualInflow)}</p>
+                    </div>
+                    <div className="flex-1 border-r border-slate-200 px-4">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Booked Revenue</p>
+                       <p className="text-2xl font-black italic text-slate-950">{formatCurrency(stats.bookedRevenue)}</p>
+                    </div>
+                    <div className="flex-1 border-r border-slate-200 px-4">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">AR Generated</p>
+                       <p className="text-2xl font-black italic text-orange-600">{formatCurrency(stats.newARGenerated)}</p>
+                    </div>
+                    <div className="flex-1 pl-4">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">AR Collected</p>
+                       <p className="text-2xl font-black italic text-emerald-600">{formatCurrency(stats.arCollections)}</p>
+                    </div>
+                 </div>
+
+                 <table className="w-full text-left text-[11px] border-collapse mb-12">
+                    <thead>
+                       <tr className="border-b-4 border-slate-950 text-slate-950">
+                          <th className="py-4 uppercase font-black tracking-widest w-24">Time</th>
+                          <th className="py-4 uppercase font-black tracking-widest w-32">Reference ID</th>
+                          <th className="py-4 uppercase font-black tracking-widest">Entity / Customer</th>
+                          <th className="py-4 uppercase font-black tracking-widest w-32">Method</th>
+                          <th className="py-4 uppercase font-black tracking-widest text-center w-24">Status</th>
+                          <th className="py-4 uppercase font-black tracking-widest text-right w-32">Amount</th>
+                       </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                       {auditMode === 'SALES' || auditMode === 'HISTORY' ? (
+                          stats.dailyOrders.map(o => (
+                             <tr key={o.id} className="hover:bg-slate-50">
+                                <td className="py-4 font-mono text-slate-500">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                                <td className="py-4 font-mono font-black text-sky-600">#{o.id.slice(-8)}</td>
+                                <td className="py-4 font-black uppercase italic text-slate-900">{o.customerName}</td>
+                                <td className="py-4 uppercase font-bold text-slate-500">{o.paymentMethod}</td>
+                                <td className="py-4 text-center">
+                                   <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : o.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
+                                      {o.status}
+                                   </span>
+                                </td>
+                                <td className="py-4 text-right font-black italic text-slate-900">{formatCurrency(o.totalAmount)}</td>
+                             </tr>
+                          ))
+                       ) : (
+                          stats.dailyPayments.map((p, i) => {
+                             const ar = receivables.find(r => r.id === p.receivableId);
+                             const order = orders.find(o => o.id === ar?.orderId);
+                             return (
+                                <tr key={i} className="hover:bg-slate-50">
+                                   <td className="py-4 font-mono text-slate-500">{new Date(p.paidAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                                   <td className="py-4 font-mono font-black text-emerald-600">PAY-{p.id.slice(-4)}</td>
+                                   <td className="py-4 font-black uppercase italic text-slate-900">{order?.customerName || 'UNKNOWN'}</td>
+                                   <td className="py-4 uppercase font-bold text-slate-500">{p.paymentMethod}</td>
+                                   <td className="py-4 text-center">
+                                      <span className="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 border border-emerald-100">COLLECTED</span>
+                                   </td>
+                                   <td className="py-4 text-right font-black italic text-emerald-600">{formatCurrency(p.amount)}</td>
+                                </tr>
+                             );
+                          })
+                       )}
+                    </tbody>
+                 </table>
+                 
+                 <div className="mt-12 pt-8 border-t-4 border-slate-950 flex justify-between items-end page-break-inside-avoid">
+                    <div className="space-y-4">
+                       <div className="w-48 border-b border-slate-950 pb-1">
+                          <p className="text-[10px] font-black uppercase italic text-slate-950">{user.username}</p>
+                       </div>
+                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Authorized Audit Officer</p>
+                    </div>
+                    <div className="text-right space-y-1">
+                       <p className="text-[10px] font-black uppercase italic text-slate-950">End of Audit Manifest</p>
+                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total Records Verified: {auditMode === 'SALES' || auditMode === 'HISTORY' ? stats.dailyOrders.length : stats.dailyPayments.length}</p>
+                    </div>
+                 </div>
+              </div>
+           </div>
+        </div>,
+        document.body
+      )}
+
+      {/* RECEIPT PRINT ROOT - Moved to Portal */}
+      {createPortal(
+        <div id="audit-receipt-print-root" className="hidden">
+          {selectedOrder && (
+            <div className="w-[80mm] bg-white">
+              <div className="receipt-copy">
+                {generateReceiptPart(
+                  selectedOrder, 
+                  printCopyType === 'ALL' ? 'CUSTOMER COPY' : (printCopyType === 'GATE' ? 'GATE PASS' : `${printCopyType} COPY`)
+                )}
+              </div>
             </div>
-
-            <div className="relative z-10">
-               <div className="flex justify-between items-start mb-10 border-b-4 border-slate-950 pb-6">
-                  <div className="flex items-center gap-6">
-                     <div className="w-20 h-20 bg-slate-950 rounded-2xl flex items-center justify-center p-4 shadow-xl">
-                        <AceCorpLogo customUrl={logoUrl} className="w-full h-full" inverted />
-                     </div>
-                     <div>
-                        <h1 className="text-4xl font-black uppercase italic tracking-tighter text-slate-950 leading-none">AceCorp Enterprise</h1>
-                        <p className="text-[10px] font-black text-sky-600 uppercase tracking-[0.4em] mt-2">Internal Audit & Compliance Division</p>
-                     </div>
-                  </div>
-                  <div className="text-right">
-                     <div className="inline-block px-4 py-1 bg-slate-950 text-white text-[10px] font-black uppercase tracking-widest mb-2">
-                        {auditMode === 'SALES' ? 'Sales Registry' : (auditMode === 'HISTORY' ? 'Order History' : 'AR Collection')} Manifest
-                     </div>
-                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Document ID: {Math.random().toString(36).substring(2, 15).toUpperCase()}</p>
-                     <p className="text-[10px] font-mono text-slate-400 mt-1">TS: {new Date().toISOString()}</p>
-                  </div>
-               </div>
-
-               <div className="flex justify-between mb-10 gap-12">
-                  <div className="flex-1 space-y-2">
-                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Node Identification</p>
-                     <p className="text-lg font-black uppercase italic text-slate-900">{activeStore?.name}</p>
-                     <p className="text-[10px] font-bold text-slate-500 uppercase">{activeStore?.address}</p>
-                  </div>
-                  <div className="text-right space-y-2">
-                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Reporting Window</p>
-                     <p className="text-lg font-black uppercase italic text-slate-900">{reportPeriod} Perspective</p>
-                     <p className="text-[10px] font-bold text-slate-500 uppercase">Reference Date: {date}</p>
-                  </div>
-               </div>
-               
-               <div className="flex gap-4 mb-10 bg-slate-50 p-8 rounded-[32px] border border-slate-200 shadow-inner">
-                  <div className="flex-1 border-r border-slate-200 pr-4">
-                     <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Net Inflow</p>
-                     <p className="text-2xl font-black italic text-slate-950">{formatCurrency(stats.netActualInflow)}</p>
-                  </div>
-                  <div className="flex-1 border-r border-slate-200 px-4">
-                     <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Booked Revenue</p>
-                     <p className="text-2xl font-black italic text-slate-950">{formatCurrency(stats.bookedRevenue)}</p>
-                  </div>
-                  <div className="flex-1 border-r border-slate-200 px-4">
-                     <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">AR Generated</p>
-                     <p className="text-2xl font-black italic text-orange-600">{formatCurrency(stats.newARGenerated)}</p>
-                  </div>
-                  <div className="flex-1 pl-4">
-                     <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">AR Collected</p>
-                     <p className="text-2xl font-black italic text-emerald-600">{formatCurrency(stats.arCollections)}</p>
-                  </div>
-               </div>
-
-               <table className="w-full text-left text-[11px] border-collapse mb-12">
-                  <thead>
-                     <tr className="border-b-4 border-slate-950 text-slate-950">
-                        <th className="py-4 uppercase font-black tracking-widest w-24">Time</th>
-                        <th className="py-4 uppercase font-black tracking-widest w-32">Reference ID</th>
-                        <th className="py-4 uppercase font-black tracking-widest">Entity / Customer</th>
-                        <th className="py-4 uppercase font-black tracking-widest w-32">Method</th>
-                        <th className="py-4 uppercase font-black tracking-widest text-center w-24">Status</th>
-                        <th className="py-4 uppercase font-black tracking-widest text-right w-32">Amount</th>
-                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                     {auditMode === 'SALES' || auditMode === 'HISTORY' ? (
-                        stats.dailyOrders.map(o => (
-                           <tr key={o.id} className="hover:bg-slate-50">
-                              <td className="py-4 font-mono text-slate-500">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
-                              <td className="py-4 font-mono font-black text-sky-600">#{o.id.slice(-8)}</td>
-                              <td className="py-4 font-black uppercase italic text-slate-900">{o.customerName}</td>
-                              <td className="py-4 uppercase font-bold text-slate-500">{o.paymentMethod}</td>
-                              <td className="py-4 text-center">
-                                 <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${o.status === OrderStatus.ORDERED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : o.status === OrderStatus.RECEIVABLE ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
-                                    {o.status}
-                                 </span>
-                              </td>
-                              <td className="py-4 text-right font-black italic text-slate-900">{formatCurrency(o.totalAmount)}</td>
-                           </tr>
-                        ))
-                     ) : (
-                        stats.dailyPayments.map((p, i) => {
-                           const ar = receivables.find(r => r.id === p.receivableId);
-                           const order = orders.find(o => o.id === ar?.orderId);
-                           return (
-                              <tr key={i} className="hover:bg-slate-50">
-                                 <td className="py-4 font-mono text-slate-500">{new Date(p.paidAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
-                                 <td className="py-4 font-mono font-black text-emerald-600">PAY-{p.id.slice(-4)}</td>
-                                 <td className="py-4 font-black uppercase italic text-slate-900">{order?.customerName || 'UNKNOWN'}</td>
-                                 <td className="py-4 uppercase font-bold text-slate-500">{p.paymentMethod}</td>
-                                 <td className="py-4 text-center">
-                                    <span className="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 border border-emerald-100">COLLECTED</span>
-                                 </td>
-                                 <td className="py-4 text-right font-black italic text-emerald-600">{formatCurrency(p.amount)}</td>
-                              </tr>
-                           );
-                        })
-                     )}
-                  </tbody>
-               </table>
-               
-               <div className="mt-12 pt-8 border-t-4 border-slate-950 flex justify-between items-end page-break-inside-avoid">
-                  <div className="space-y-4">
-                     <div className="w-48 border-b border-slate-950 pb-1">
-                        <p className="text-[10px] font-black uppercase italic text-slate-950">{user.username}</p>
-                     </div>
-                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Authorized Audit Officer</p>
-                  </div>
-                  <div className="text-right space-y-1">
-                     <p className="text-[10px] font-black uppercase italic text-slate-950">End of Audit Manifest</p>
-                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total Records Verified: {auditMode === 'SALES' || auditMode === 'HISTORY' ? stats.dailyOrders.length : stats.dailyPayments.length}</p>
-                  </div>
-               </div>
-            </div>
-         </div>
-      </div>
-
-      {/* RECEIPT PRINT ROOT */}
-      <div id="audit-receipt-print-root" className="hidden">
-        {selectedOrder && (
-          <div className="w-[80mm] bg-white">
-            <div className="receipt-copy">
-              {generateReceiptPart(
-                selectedOrder, 
-                printCopyType === 'ALL' ? 'CUSTOMER COPY' : (printCopyType === 'GATE' ? 'GATE PASS' : `${printCopyType} COPY`)
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>,
+        document.body
+      )}
       
       {/* INTELLIGENCE HUB SUMMARY */}
       <div className="px-8 py-6 bg-slate-800 text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 no-print">
