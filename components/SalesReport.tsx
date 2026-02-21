@@ -319,18 +319,6 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
           tr { page-break-inside: avoid !important; page-break-after: auto !important; }
           td, th { page-break-inside: avoid !important; }
           
-          /* Disable flex/grid for print to avoid layout issues */
-          .flex, .grid { display: block !important; }
-          .grid-cols-2 { display: block !important; }
-          .grid-cols-4 { display: block !important; }
-          .grid-cols-2 > *, .grid-cols-4 > * { 
-            width: 100% !important; 
-            margin-bottom: 1rem !important; 
-            border-right: none !important;
-            padding-left: 0 !important;
-            padding-right: 0 !important;
-          }
-
           /* --- RECEIPT MODE --- */
           body.printing-receipt #audit-receipt-print-root {
             display: block !important;
@@ -364,7 +352,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
 
       {/* FULL AUDIT REPORT PRINT ROOT */}
       <div id="audit-manifest-report-root" className="hidden">
-         <div className="p-12 bg-white relative">
+         <div className="p-8 pt-4 bg-white relative">
             {/* Professional Watermark */}
             <div className="absolute inset-0 flex items-center justify-center opacity-[0.02] pointer-events-none select-none overflow-hidden">
                <h1 className="text-[140px] font-black uppercase -rotate-45 whitespace-nowrap">ACECORP OFFICIAL</h1>
