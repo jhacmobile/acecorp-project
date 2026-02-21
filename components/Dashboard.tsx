@@ -308,7 +308,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           /* --- REPORT MODE --- */
           body:not(.printing-receipt) #dashboard-all-orders-print-root {
             display: block !important;
-            position: absolute !important;
+            position: fixed !important;
             top: 0 !important;
             left: 0 !important;
             width: 100% !important;
@@ -365,7 +365,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
 
       {/* FULL SALES REPORT PRINT ROOT */}
       <div id="dashboard-all-orders-print-root" className="hidden">
-         <div className="p-8 pt-4 bg-white relative">
+         <div className="p-8 pt-0 bg-white relative">
             {/* Professional Watermark */}
             <div className="absolute inset-0 flex items-center justify-center opacity-[0.02] pointer-events-none select-none overflow-hidden">
                <h1 className="text-[140px] font-black uppercase -rotate-45 whitespace-nowrap">ACECORP OFFICIAL</h1>
