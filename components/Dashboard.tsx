@@ -281,24 +281,22 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             color: black !important; 
             margin: 0 !important;
             padding: 0 !important;
-            display: block !important;
           }
           
-          /* Hide everything by default using display: none to prevent blank space */
-          body > * { display: none !important; }
-          
-          /* Show only the print roots */
-          #dashboard-all-orders-print-root, 
-          #dashboard-receipt-print-root { 
-            display: block !important; 
-          }
+          body { visibility: hidden !important; }
 
-          /* Reset layout for print */
-          #root { 
-            display: block !important;
+          /* Reset ALL potential parent containers to allow natural height and overflow */
+          #root, 
+          div[class*="flex"], 
+          div[class*="h-screen"], 
+          div[class*="overflow-hidden"], 
+          main, 
+          section { 
             height: auto !important; 
             min-height: 0 !important;
+            max-height: none !important;
             overflow: visible !important; 
+            display: block !important; 
             position: static !important; 
             margin: 0 !important;
             padding: 0 !important;
@@ -306,8 +304,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           
           /* --- REPORT MODE --- */
           body:not(.printing-receipt) #dashboard-all-orders-print-root {
+            visibility: visible !important;
             display: block !important;
-            position: static !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
             width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
@@ -315,6 +316,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             height: auto !important;
             min-height: 0 !important;
             overflow: visible !important;
+          }
+          body:not(.printing-receipt) #dashboard-all-orders-print-root * {
+            visibility: visible !important;
           }
 
           /* Ensure table headers repeat and page breaks work */
@@ -330,12 +334,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           tr { page-break-inside: avoid !important; page-break-after: auto !important; display: table-row !important; }
           td, th { page-break-inside: avoid !important; display: table-cell !important; }
           
-          /* Disable flex/grid for print containers that need to break */
-          .flex, .grid { display: block !important; }
-          .flex > *, .grid > * { margin-bottom: 1rem; }
-
           /* --- RECEIPT MODE --- */
           body.printing-receipt #dashboard-receipt-print-root {
+            visibility: visible !important;
             display: block !important;
             position: absolute !important;
             left: 0 !important;
@@ -348,6 +349,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             background: white !important; 
             color: black !important; 
             z-index: 9999 !important;
+          }
+          body.printing-receipt #dashboard-receipt-print-root * {
+            visibility: visible !important;
           }
           
           .receipt-copy { 
