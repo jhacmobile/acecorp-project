@@ -270,7 +270,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
         @media print {
           @page { 
             size: auto; 
-            margin: 0mm; 
+            margin: 15mm; 
           }
           
           html, body { 
@@ -281,25 +281,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             color: black !important; 
             margin: 0 !important;
             padding: 0 !important;
+            display: block !important;
           }
           
-          /* Hide everything by default */
-          body * { visibility: hidden !important; }
+          /* Hide everything by default using display: none to prevent blank space */
+          body > * { display: none !important; }
           
-          /* Show only the print roots and their content */
+          /* Show only the print roots */
           #dashboard-all-orders-print-root, 
-          #dashboard-all-orders-print-root *,
-          #dashboard-receipt-print-root,
-          #dashboard-receipt-print-root * { 
-            visibility: visible !important; 
+          #dashboard-receipt-print-root { 
+            display: block !important; 
           }
 
           /* Reset layout for print */
-          #root, .flex, .flex-col, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar { 
+          #root { 
+            display: block !important;
             height: auto !important; 
             min-height: 0 !important;
             overflow: visible !important; 
-            display: block !important; 
             position: static !important; 
             margin: 0 !important;
             padding: 0 !important;
@@ -308,9 +307,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           /* --- REPORT MODE --- */
           body:not(.printing-receipt) #dashboard-all-orders-print-root {
             display: block !important;
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
+            position: static !important;
             width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
@@ -318,7 +315,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             height: auto !important;
             min-height: 0 !important;
             overflow: visible !important;
-            z-index: 9999 !important;
           }
 
           /* Ensure table headers repeat and page breaks work */
@@ -327,11 +323,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             border-collapse: collapse !important;
             table-layout: auto !important;
             page-break-inside: auto !important;
+            display: table !important;
           }
           thead { display: table-header-group !important; }
-          tr { page-break-inside: avoid !important; page-break-after: auto !important; }
-          td, th { page-break-inside: avoid !important; }
+          tbody { display: table-row-group !important; }
+          tr { page-break-inside: avoid !important; page-break-after: auto !important; display: table-row !important; }
+          td, th { page-break-inside: avoid !important; display: table-cell !important; }
           
+          /* Disable flex/grid for print containers that need to break */
+          .flex, .grid { display: block !important; }
+          .flex > *, .grid > * { margin-bottom: 1rem; }
+
           /* --- RECEIPT MODE --- */
           body.printing-receipt #dashboard-receipt-print-root {
             display: block !important;
@@ -365,7 +367,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
 
       {/* FULL SALES REPORT PRINT ROOT */}
       <div id="dashboard-all-orders-print-root" className="hidden">
-         <div className="p-8 pt-0 bg-white relative">
+         <div className="p-0 bg-white relative">
             {/* Professional Watermark */}
             <div className="absolute inset-0 flex items-center justify-center opacity-[0.02] pointer-events-none select-none overflow-hidden">
                <h1 className="text-[140px] font-black uppercase -rotate-45 whitespace-nowrap">ACECORP OFFICIAL</h1>
