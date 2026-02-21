@@ -522,22 +522,22 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     const store = stores.find(s => s.id === order.storeId);
     return (
        <div className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
-          <div className="w-48 h-auto max-h-32 mx-auto mb-0 overflow-hidden flex items-center justify-center">
+          <div className="w-48 h-auto max-h-32 mx-auto mb-4 overflow-hidden flex items-center justify-center">
              <AceCorpLogo customUrl={logoUrl} className="w-full h-auto" />
           </div>
-          <div className="border border-black px-4 py-1 inline-block mb-1">
+          <div className="border border-black px-4 py-1 inline-block mb-2">
              <h3 className="text-[12px] font-black uppercase tracking-widest">{label}</h3>
           </div>
           <h4 className="text-sm font-black uppercase italic leading-none mb-1 text-black">{store?.name || 'ACECORP'}</h4>
           <p className="text-[10px] uppercase font-bold leading-tight text-black">{store?.address || ''}</p>
           <p className="text-[10px] uppercase font-bold text-black">{store?.mobile || ''}</p>
           <div className="border-b border-black border-dashed my-2"></div>
-          <div className="text-left font-bold space-y-1 uppercase text-[10px] text-black">
-             <div className="flex justify-between"><span>Ref:</span> <span>{order.id.slice(-8)}</span></div>
-             <div className="flex justify-between"><span>Date:</span> <span>{new Date(order.createdAt).toLocaleDateString()}</span></div>
-             <div className="flex justify-between"><span>Operator:</span> <span>{order.createdBy}</span></div>
-             {order.riderName && <div className="flex justify-between"><span>Rider:</span> <span>{order.riderName}</span></div>}
-             <div className="pt-1"><p className="font-black text-[11px] uppercase italic text-black">{order.customerName}</p><p className="text-black">{order.address}</p></div>
+          <div className="text-left font-bold space-y-0.5 uppercase text-[10px] text-black">
+             <div className="flex gap-1"><span>Ref:</span> <span>{order.id.slice(-8)}</span></div>
+             <div className="flex gap-1"><span>Date:</span> <span>{new Date(order.createdAt).toLocaleDateString()}</span></div>
+             <div className="flex gap-1"><span>Operator:</span> <span>{order.createdBy}</span></div>
+             {order.riderName && <div className="flex gap-1"><span>Rider:</span> <span>{order.riderName}</span></div>}
+             <div className="pt-2"><p className="font-black text-[11px] uppercase italic text-black leading-tight">{order.customerName}</p><p className="text-black leading-tight">{order.address}</p></div>
           </div>
           <div className="border-b border-black border-dashed my-2"></div>
           <div className="space-y-2 mb-4">
