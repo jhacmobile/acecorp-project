@@ -255,32 +255,45 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden text-slate-900 font-sans">
       <style>{`
         @media print {
-          @page { size: auto; margin: 0; }
+          @page { 
+            size: auto; 
+            margin: 0mm; 
+          }
           
           html, body { 
             height: auto !important; 
+            min-height: 0 !important;
             overflow: visible !important; 
             background: white !important; 
             color: black !important; 
-            display: block !important;
             margin: 0 !important;
             padding: 0 !important;
           }
           
-          body { visibility: hidden !important; }
-          .no-print { display: none !important; }
+          /* Hide everything by default */
+          body * { visibility: hidden !important; }
+          
+          /* Show only the print roots and their content */
+          #audit-manifest-report-root, 
+          #audit-manifest-report-root *,
+          #audit-receipt-print-root,
+          #audit-receipt-print-root * { 
+            visibility: visible !important; 
+          }
 
-          /* Reset layout to allow content to flow */
+          /* Reset layout for print */
           #root, .flex, .flex-col, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar { 
             height: auto !important; 
+            min-height: 0 !important;
             overflow: visible !important; 
             display: block !important; 
             position: static !important; 
+            margin: 0 !important;
+            padding: 0 !important;
           }
           
-          /* --- REPORT MODE (Default) --- */
+          /* --- REPORT MODE --- */
           body:not(.printing-receipt) #audit-manifest-report-root {
-            visibility: visible !important;
             display: block !important;
             position: absolute !important;
             top: 0 !important;
@@ -288,17 +301,11 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
             width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: white;
+            background: white !important;
             height: auto !important;
+            min-height: 0 !important;
             overflow: visible !important;
             z-index: 9999 !important;
-          }
-          body:not(.printing-receipt) #audit-manifest-report-root * {
-            visibility: visible !important;
-          }
-          /* Add margins for the report content itself */
-          body:not(.printing-receipt) #audit-manifest-report-root > div {
-            margin: 0;
           }
 
           /* Ensure table headers repeat and page breaks work */
@@ -312,12 +319,20 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
           tr { page-break-inside: avoid !important; page-break-after: auto !important; }
           td, th { page-break-inside: avoid !important; }
           
-          /* Disable flexbox for print if it causes issues with page breaks */
+          /* Disable flex/grid for print to avoid layout issues */
           .flex, .grid { display: block !important; }
+          .grid-cols-2 { display: block !important; }
+          .grid-cols-4 { display: block !important; }
+          .grid-cols-2 > *, .grid-cols-4 > * { 
+            width: 100% !important; 
+            margin-bottom: 1rem !important; 
+            border-right: none !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+          }
 
           /* --- RECEIPT MODE --- */
           body.printing-receipt #audit-receipt-print-root {
-            visibility: visible !important;
             display: block !important;
             position: absolute !important;
             left: 0 !important;
@@ -331,9 +346,6 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
             color: black !important; 
             z-index: 9999 !important;
           }
-          body.printing-receipt #audit-receipt-print-root * {
-            visibility: visible !important;
-          }
           
           .receipt-copy { 
              display: block !important;
@@ -345,24 +357,21 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
              overflow: hidden !important;
           }
 
-          /* Explicitly hide the opposing container to prevent interference */
-          body.printing-receipt #audit-manifest-report-root { display: none !important; }
-          body:not(.printing-receipt) #audit-receipt-print-root { display: none !important; }
-
-          button, header, aside { display: none !important; }
+          /* Hide UI elements */
+          button, header, aside, nav, .no-print { display: none !important; }
         }
       `}</style>
 
       {/* FULL AUDIT REPORT PRINT ROOT */}
       <div id="audit-manifest-report-root" className="hidden">
-         <div className="p-16 bg-white relative">
+         <div className="p-12 bg-white relative">
             {/* Professional Watermark */}
-            <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none overflow-hidden">
-               <h1 className="text-[120px] font-black uppercase -rotate-45 whitespace-nowrap">ACECORP AUDIT</h1>
+            <div className="absolute inset-0 flex items-center justify-center opacity-[0.02] pointer-events-none select-none overflow-hidden">
+               <h1 className="text-[140px] font-black uppercase -rotate-45 whitespace-nowrap">ACECORP OFFICIAL</h1>
             </div>
 
             <div className="relative z-10">
-               <div className="flex justify-between items-start mb-12 border-b-4 border-slate-950 pb-8">
+               <div className="flex justify-between items-start mb-10 border-b-4 border-slate-950 pb-6">
                   <div className="flex items-center gap-6">
                      <div className="w-20 h-20 bg-slate-950 rounded-2xl flex items-center justify-center p-4 shadow-xl">
                         <AceCorpLogo customUrl={logoUrl} className="w-full h-full" inverted />
@@ -381,8 +390,8 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   </div>
                </div>
 
-               <div className="grid grid-cols-2 gap-12 mb-12">
-                  <div className="space-y-2">
+               <div className="flex justify-between mb-10 gap-12">
+                  <div className="flex-1 space-y-2">
                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Node Identification</p>
                      <p className="text-lg font-black uppercase italic text-slate-900">{activeStore?.name}</p>
                      <p className="text-[10px] font-bold text-slate-500 uppercase">{activeStore?.address}</p>
@@ -394,34 +403,34 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   </div>
                </div>
                
-               <div className="grid grid-cols-4 gap-4 mb-12 bg-slate-50 p-8 rounded-[32px] border border-slate-200 shadow-inner">
-                  <div className="border-r border-slate-200 pr-4">
+               <div className="flex gap-4 mb-10 bg-slate-50 p-8 rounded-[32px] border border-slate-200 shadow-inner">
+                  <div className="flex-1 border-r border-slate-200 pr-4">
                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Net Inflow</p>
                      <p className="text-2xl font-black italic text-slate-950">{formatCurrency(stats.netActualInflow)}</p>
                   </div>
-                  <div className="border-r border-slate-200 px-4">
+                  <div className="flex-1 border-r border-slate-200 px-4">
                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Booked Revenue</p>
                      <p className="text-2xl font-black italic text-slate-950">{formatCurrency(stats.bookedRevenue)}</p>
                   </div>
-                  <div className="border-r border-slate-200 px-4">
+                  <div className="flex-1 border-r border-slate-200 px-4">
                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">AR Generated</p>
                      <p className="text-2xl font-black italic text-orange-600">{formatCurrency(stats.newARGenerated)}</p>
                   </div>
-                  <div className="pl-4">
+                  <div className="flex-1 pl-4">
                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">AR Collected</p>
                      <p className="text-2xl font-black italic text-emerald-600">{formatCurrency(stats.arCollections)}</p>
                   </div>
                </div>
 
-               <table className="w-full text-left text-[11px] border-collapse">
+               <table className="w-full text-left text-[11px] border-collapse mb-12">
                   <thead>
                      <tr className="border-b-4 border-slate-950 text-slate-950">
-                        <th className="py-4 uppercase font-black tracking-widest">Time</th>
-                        <th className="py-4 uppercase font-black tracking-widest">Reference ID</th>
+                        <th className="py-4 uppercase font-black tracking-widest w-24">Time</th>
+                        <th className="py-4 uppercase font-black tracking-widest w-32">Reference ID</th>
                         <th className="py-4 uppercase font-black tracking-widest">Entity / Customer</th>
-                        <th className="py-4 uppercase font-black tracking-widest">Method</th>
-                        <th className="py-4 uppercase font-black tracking-widest text-center">Status</th>
-                        <th className="py-4 uppercase font-black tracking-widest text-right">Amount</th>
+                        <th className="py-4 uppercase font-black tracking-widest w-32">Method</th>
+                        <th className="py-4 uppercase font-black tracking-widest text-center w-24">Status</th>
+                        <th className="py-4 uppercase font-black tracking-widest text-right w-32">Amount</th>
                      </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -461,7 +470,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   </tbody>
                </table>
                
-               <div className="mt-16 pt-8 border-t-4 border-slate-950 flex justify-between items-end">
+               <div className="mt-12 pt-8 border-t-4 border-slate-950 flex justify-between items-end page-break-inside-avoid">
                   <div className="space-y-4">
                      <div className="w-48 border-b border-slate-950 pb-1">
                         <p className="text-[10px] font-black uppercase italic text-slate-950">{user.username}</p>
