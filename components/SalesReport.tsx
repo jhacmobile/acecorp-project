@@ -17,7 +17,8 @@ interface SalesProps {
 }
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly';
-type AuditMode = 'SALES' | 'AR_COLLECTION';
+type AuditMode = 'SALES' | 'AR_COLLECTION' | 'HISTORY';
+type OrderTypeFilter = 'ALL' | 'PICKUP' | 'DELIVERY';
 
 const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, receivablePayments, logoUrl }) => {
   const getPHDateString = (date: Date = new Date()) => {
@@ -44,6 +45,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
   const [auditMode, setAuditMode] = useState<AuditMode>('SALES');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
   const [paymentFilter, setPaymentFilter] = useState<PaymentMethod | 'ALL'>('ALL');
+  const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showOrderReceipt, setShowOrderReceipt] = useState(false);
@@ -126,23 +128,26 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     return { netActualInflow, bookedRevenue, newARGenerated: newARGeneratedTotal, arCollections: arCollectionsTotal, breakdown, dailyOrders, dailyPayments };
   }, [nodeOrders, date, reportPeriod, receivables, receivablePayments, user.selectedStoreId, orders]);
 
-  useEffect(() => { setCurrentPage(1); }, [date, reportPeriod, auditMode, statusFilter, paymentFilter, searchQuery]);
+  useEffect(() => { setCurrentPage(1); }, [date, reportPeriod, auditMode, statusFilter, paymentFilter, orderTypeFilter, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(stats.dailyOrders.length / ITEMS_PER_PAGE));
   const arTotalPages = Math.max(1, Math.ceil(stats.dailyPayments.length / ITEMS_PER_PAGE));
   const currentTotalPages = auditMode === 'SALES' ? totalPages : arTotalPages;
 
   const paginatedOrders = useMemo(() => {
-    let base = stats.dailyOrders;
+    let base = auditMode === 'HISTORY' ? nodeOrders : stats.dailyOrders;
     if (statusFilter !== 'ALL') base = base.filter(o => o.status === statusFilter);
     if (paymentFilter !== 'ALL') base = base.filter(o => o.paymentMethod === paymentFilter);
+    if (orderTypeFilter === 'PICKUP') base = base.filter(o => o.customerId === 'PICKUP-CUST');
+    if (orderTypeFilter === 'DELIVERY') base = base.filter(o => o.customerId !== 'PICKUP-CUST');
+    
     if (searchQuery) {
         const q = searchQuery.toLowerCase();
         base = base.filter(o => o.customerName.toLowerCase().includes(q) || o.id.toLowerCase().includes(q) || o.createdBy.toLowerCase().includes(q));
     }
     const safePage = Math.min(currentPage, Math.ceil(base.length / ITEMS_PER_PAGE) || 1);
     return base.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
-  }, [stats.dailyOrders, currentPage, statusFilter, paymentFilter, searchQuery]);
+  }, [stats.dailyOrders, nodeOrders, currentPage, statusFilter, paymentFilter, orderTypeFilter, searchQuery, auditMode]);
 
   const paginatedAR = useMemo(() => {
     const data = stats.dailyPayments.map(p => {
@@ -205,13 +210,42 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     );
   };
 
-  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    document.body.classList.add('printing-receipt');
-    setPrintCopyType(type); 
-    setTimeout(() => { 
-       window.print(); 
-       document.body.classList.remove('printing-receipt');
-    }, 150);
+  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    if (type === 'ALL') {
+      const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
+      for (const copy of sequence) {
+        setPrintCopyType(copy);
+        document.body.classList.add('printing-receipt');
+        const style = document.createElement('style');
+        style.id = 'receipt-print-style';
+        style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
+        document.head.appendChild(style);
+
+        await new Promise(resolve => setTimeout(resolve, 200));
+        window.print();
+        
+        document.body.classList.remove('printing-receipt');
+        const injectedStyle = document.getElementById('receipt-print-style');
+        if (injectedStyle) injectedStyle.remove();
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      setPrintCopyType('ALL');
+    } else {
+      document.body.classList.add('printing-receipt');
+      const style = document.createElement('style');
+      style.id = 'receipt-print-style';
+      style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
+      document.head.appendChild(style);
+
+      setPrintCopyType(type); 
+      setTimeout(() => { 
+         window.print(); 
+         document.body.classList.remove('printing-receipt');
+         const injectedStyle = document.getElementById('receipt-print-style');
+         if (injectedStyle) injectedStyle.remove();
+      }, 200);
+    }
   };
 
   const activeStore = stores.find(s => s.id === user.selectedStoreId);
@@ -221,15 +255,19 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden text-slate-900 font-sans">
       <style>{`
         @media print {
-          @page { size: 80mm auto; margin: 0mm; }
+          @page { size: auto; margin: 10mm; }
           
           html, body { 
             height: auto !important; 
             overflow: visible !important; 
             background: white !important; 
             color: black !important; 
+            display: block !important;
           }
           
+          body { visibility: hidden !important; }
+          .no-print { display: none !important; }
+
           /* Reset layout to allow content to flow */
           #root, .flex, .flex-col, .flex-1, .h-screen, .overflow-hidden, .custom-scrollbar { 
             height: auto !important; 
@@ -238,28 +276,42 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
             position: static !important; 
           }
           
-          /* Hide everything by default using visibility to preserve flow but hide content */
-          body * {
-            visibility: hidden;
-          }
-          
           /* --- REPORT MODE (Default) --- */
           body:not(.printing-receipt) #audit-manifest-report-root {
             visibility: visible !important;
+            display: block !important;
             position: absolute !important;
             top: 0 !important;
             left: 0 !important;
             width: 100% !important;
-            display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
             background: white;
+            height: auto !important;
+            overflow: visible !important;
+            z-index: 9999 !important;
           }
           body:not(.printing-receipt) #audit-manifest-report-root * {
             visibility: visible !important;
           }
           /* Add margins for the report content itself */
           body:not(.printing-receipt) #audit-manifest-report-root > div {
-            margin: 10mm;
+            margin: 0;
           }
+
+          /* Ensure table headers repeat and page breaks work */
+          table { 
+            width: 100% !important; 
+            border-collapse: collapse !important;
+            table-layout: auto !important;
+            page-break-inside: auto !important;
+          }
+          thead { display: table-header-group !important; }
+          tr { page-break-inside: avoid !important; page-break-after: auto !important; }
+          td, th { page-break-inside: avoid !important; }
+          
+          /* Disable flexbox for print if it causes issues with page breaks */
+          .flex, .grid { display: block !important; }
 
           /* --- RECEIPT MODE --- */
           body.printing-receipt #audit-receipt-print-root {
@@ -295,7 +347,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
           body.printing-receipt #audit-manifest-report-root { display: none !important; }
           body:not(.printing-receipt) #audit-receipt-print-root { display: none !important; }
 
-          .no-print, button, header, aside { display: none !important; }
+          button, header, aside { display: none !important; }
         }
       `}</style>
 
@@ -328,8 +380,8 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                   </tr>
                </thead>
                <tbody className="divide-y divide-slate-200">
-                  {auditMode === 'SALES' ? (
-                     stats.dailyOrders.map(o => (
+                  {auditMode === 'SALES' || auditMode === 'HISTORY' ? (
+                     (auditMode === 'HISTORY' ? nodeOrders : stats.dailyOrders).map(o => (
                         <tr key={o.id}>
                            <td className="py-2 font-mono">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
                            <td className="py-2 font-mono">#{o.id.slice(-8)}</td>
@@ -360,7 +412,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
             
             <div className="mt-8 pt-4 border-t-2 border-black flex justify-between items-center">
                <p className="text-[9px] font-bold uppercase">End of Report</p>
-               <p className="text-[9px] font-bold uppercase">Total Records: {auditMode === 'SALES' ? stats.dailyOrders.length : stats.dailyPayments.length}</p>
+               <p className="text-[9px] font-bold uppercase">Total Records: {auditMode === 'SALES' ? stats.dailyOrders.length : (auditMode === 'HISTORY' ? nodeOrders.length : stats.dailyPayments.length)}</p>
             </div>
          </div>
       </div>
@@ -369,15 +421,12 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
       <div id="audit-receipt-print-root" className="hidden">
         {selectedOrder && (
           <div className="w-[80mm] bg-white">
-             {printCopyType === 'ALL' ? (
-                <>
-                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}</div>
-                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'GATE PASS')}</div>
-                  <div className="receipt-copy">{generateReceiptPart(selectedOrder, 'STORE COPY')}</div>
-                </>
-             ) : (
-                <div className="receipt-copy">{generateReceiptPart(selectedOrder, `${printCopyType} COPY`)}</div>
-             )}
+            <div className="receipt-copy">
+              {generateReceiptPart(
+                selectedOrder, 
+                printCopyType === 'ALL' ? 'CUSTOMER COPY' : (printCopyType === 'GATE' ? 'GATE PASS' : `${printCopyType} COPY`)
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -435,30 +484,67 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                      <div className="grid grid-cols-1 gap-2 p-1.5 bg-slate-50 rounded-[24px] border border-slate-100">
                         <button onClick={() => setAuditMode('SALES')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'SALES' ? 'bg-slate-400 text-white shadow-lg italic' : 'text-slate-400 hover:text-slate-600'}`}>Sales Registry</button>
                         <button onClick={() => setAuditMode('AR_COLLECTION')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'AR_COLLECTION' ? 'bg-slate-400 text-white shadow-lg italic' : 'text-slate-400 hover:text-slate-600'}`}>AR Collections</button>
+                        <button onClick={() => setAuditMode('HISTORY')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'HISTORY' ? 'bg-slate-400 text-white shadow-lg italic' : 'text-slate-400 hover:text-slate-600'}`}>Order History</button>
                      </div>
                   </div>
 
-                  {/* Period Selector - NEW Feature */}
-                  <div className="space-y-4">
-                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Timeframe Protocol</label>
-                     <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100">
-                        {(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (
-                          <button 
-                            key={p} 
-                            onClick={() => setReportPeriod(p)} 
-                            className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${reportPeriod === p ? 'bg-white text-sky-600 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
-                          >
-                            {p}
-                          </button>
-                        ))}
-                     </div>
-                  </div>
+                  {auditMode !== 'HISTORY' && (
+                    <div className="space-y-10 animate-in fade-in slide-in-from-top-2">
+                       {/* Period Selector - NEW Feature */}
+                       <div className="space-y-4">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Timeframe Protocol</label>
+                          <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100">
+                             {(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (
+                               <button 
+                                 key={p} 
+                                 onClick={() => setReportPeriod(p)} 
+                                 className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${reportPeriod === p ? 'bg-white text-sky-600 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                               >
+                                 {p}
+                               </button>
+                             ))}
+                          </div>
+                       </div>
 
-                  {/* Reference Date Picker */}
-                  <div className="space-y-4">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Reference Date</label>
-                    <CustomDatePicker value={date} onChange={setDate} className="w-full shadow-sm" />
-                  </div>
+                       {/* Reference Date Picker */}
+                       <div className="space-y-4">
+                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Reference Date</label>
+                         <CustomDatePicker value={date} onChange={setDate} className="w-full shadow-sm" />
+                       </div>
+                    </div>
+                  )}
+
+                  {auditMode === 'HISTORY' && (
+                    <div className="space-y-10 animate-in fade-in slide-in-from-top-2">
+                       <div className="space-y-4">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Order Type</label>
+                          <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100">
+                             {(['ALL', 'PICKUP', 'DELIVERY'] as OrderTypeFilter[]).map(t => (
+                               <button key={t} onClick={() => setOrderTypeFilter(t)} className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${orderTypeFilter === t ? 'bg-white text-sky-600 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>{t}</button>
+                             ))}
+                          </div>
+                       </div>
+                       <div className="space-y-4">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Payment Filter</label>
+                          <select value={paymentFilter} onChange={e => setPaymentFilter(e.target.value as any)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-black uppercase outline-none focus:border-sky-400 transition-all">
+                             <option value="ALL">All Methods</option>
+                             <option value="CASH">Cash</option>
+                             <option value="GCASH">GCash</option>
+                             <option value="MAYA">Maya</option>
+                             <option value="BANK">Bank</option>
+                          </select>
+                       </div>
+                       <div className="space-y-4">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Status Filter</label>
+                          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-black uppercase outline-none focus:border-sky-400 transition-all">
+                             <option value="ALL">All Status</option>
+                             <option value={OrderStatus.ORDERED}>Ordered</option>
+                             <option value={OrderStatus.RECEIVABLE}>Receivable</option>
+                             <option value={OrderStatus.CANCELLED}>Cancelled</option>
+                          </select>
+                       </div>
+                    </div>
+                  )}
                </div>
             </div>
          </aside>
@@ -578,7 +664,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                         <button onClick={() => handlePrintRequest('STORE')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'STORE' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-900 border-slate-200'}`}>Store</button>
                         <button onClick={() => handlePrintRequest('ALL')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'ALL' ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-900 border-slate-200'}`}>ALL</button>
                     </div>
-                    <button onClick={() => handlePrintRequest('ALL')} className="py-5 bg-sky-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Reprint</button>
+                    <button onClick={() => handlePrintRequest(printCopyType)} className="py-5 bg-sky-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Reprint</button>
                   </div>
                   <button onClick={() => setSelectedOrder(null)} className="w-full py-4 text-slate-400 font-black uppercase text-[10px] active:scale-95">Dismiss detailed view</button>
                </div>
