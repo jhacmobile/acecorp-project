@@ -268,7 +268,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden font-sans text-slate-900">
       <style>{`
         @media print {
-          @page { size: auto; margin: 10mm; }
+          @page { size: auto; margin: 0; }
           
           html, body { 
             height: auto !important; 
@@ -276,6 +276,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             background: white !important; 
             color: black !important; 
             display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           
           body { visibility: hidden !important; }
@@ -366,7 +368,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
 
       {/* FULL SALES REPORT PRINT ROOT */}
       <div id="dashboard-all-orders-print-root" className="hidden">
-         <div className="p-12 bg-white min-h-screen relative">
+         <div className="p-16 bg-white relative">
             {/* Professional Watermark */}
             <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none overflow-hidden">
                <h1 className="text-[120px] font-black uppercase -rotate-45 whitespace-nowrap">ACECORP SALES</h1>

@@ -255,7 +255,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden text-slate-900 font-sans">
       <style>{`
         @media print {
-          @page { size: auto; margin: 10mm; }
+          @page { size: auto; margin: 0; }
           
           html, body { 
             height: auto !important; 
@@ -263,6 +263,8 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
             background: white !important; 
             color: black !important; 
             display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           
           body { visibility: hidden !important; }
@@ -353,7 +355,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
 
       {/* FULL AUDIT REPORT PRINT ROOT */}
       <div id="audit-manifest-report-root" className="hidden">
-         <div className="p-12 bg-white min-h-screen relative">
+         <div className="p-16 bg-white relative">
             {/* Professional Watermark */}
             <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none overflow-hidden">
                <h1 className="text-[120px] font-black uppercase -rotate-45 whitespace-nowrap">ACECORP AUDIT</h1>
