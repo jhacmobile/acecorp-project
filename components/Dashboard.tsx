@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import ReactDOM from 'react-dom';
 import { Order, Product, OrderStatus, Store, Stock, User, PaymentMethod, ReceivablePayment, AccountsReceivable } from '../types';
+import { PICKUP_CUSTOMER } from '../constants';
 import CustomDatePicker from './CustomDatePicker';
 import AceCorpLogo from './AceCorpLogo';
 import { 
@@ -46,7 +47,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
   const todayString = getPHDateString();
   const [registryDate, setRegistryDate] = useState(todayString);
   const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('daily');
-  const [auditMode, setAuditMode] = useState<'SALES' | 'HISTORY'>('SALES');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
   const [paymentFilter, setPaymentFilter] = useState<PaymentMethod | 'ALL'>('ALL');
   const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>('ALL');
@@ -121,14 +121,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     return { netActualInflow, bookedRevenue, newARGenerated: newARGeneratedTotal, arCollections: arCollectionsTotal, breakdown, orderCount: dailyOrders.length, filteredOrders: dailyOrders, dailyPayments };
   }, [nodeOrders, registryDate, reportPeriod, receivables, receivablePayments, selectedStoreId, orders]);
 
-  useEffect(() => { setCurrentPage(1); }, [selectedStoreId, registryDate, reportPeriod, auditMode, statusFilter, paymentFilter, orderTypeFilter, searchQuery]);
+  useEffect(() => { setCurrentPage(1); }, [selectedStoreId, registryDate, reportPeriod, statusFilter, paymentFilter, orderTypeFilter, searchQuery]);
 
   const filteredOrdersForList = useMemo(() => {
     let base = stats.filteredOrders;
     if (statusFilter !== 'ALL') base = base.filter(o => o.status === statusFilter);
     if (paymentFilter !== 'ALL') base = base.filter(o => o.paymentMethod === paymentFilter);
-    if (orderTypeFilter === 'PICKUP') base = base.filter(o => o.customerId === 'PICKUP-CUST');
-    if (orderTypeFilter === 'DELIVERY') base = base.filter(o => o.customerId !== 'PICKUP-CUST');
+    if (orderTypeFilter === 'PICKUP') base = base.filter(o => o.customerId === PICKUP_CUSTOMER.id);
+    if (orderTypeFilter === 'DELIVERY') base = base.filter(o => o.customerId !== PICKUP_CUSTOMER.id);
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       base = base.filter(o => o.customerName.toLowerCase().includes(q) || o.id.toLowerCase().includes(q) || o.createdBy.toLowerCase().includes(q));
@@ -336,7 +336,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
       `}</style>
 
       {/* FULL SALES REPORT PRINT ROOT - Moved to Portal */}
-      {createPortal(
+      {ReactDOM.createPortal(
         <div id="dashboard-all-orders-print-root" className="hidden">
            <div className="p-0 bg-white relative">
               {/* Professional Watermark */}
@@ -357,7 +357,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                     </div>
                     <div className="text-right">
                        <div className="inline-block px-4 py-1 bg-slate-950 text-white text-[10px] font-black uppercase tracking-widest mb-2">
-                          {auditMode === 'SALES' ? 'Sales Registry' : 'Order History'} Manifest
+                          Sales Registry Manifest
                        </div>
                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Document ID: {Math.random().toString(36).substring(2, 15).toUpperCase()}</p>
                        <p className="text-[10px] font-mono text-slate-400 mt-1">TS: {new Date().toISOString()}</p>
@@ -444,7 +444,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
       )}
 
       {/* RECEIPT PRINT ROOT - Moved to Portal */}
-      {createPortal(
+      {ReactDOM.createPortal(
         <div id="dashboard-receipt-print-root" className="hidden">
           {selectedOrder && (
             <div className="w-[80mm] bg-white">
@@ -509,7 +509,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-white p-2 rounded-[24px] shadow-sm border border-slate-100">
                <CustomDatePicker value={registryDate} onChange={setRegistryDate} className="w-full sm:w-48" />
                <div className="flex p-1 bg-slate-50 rounded-xl">
-                  {(['daily', 'weekly', 'monthly', 'history'] as ReportPeriod[]).map(p => (
+                  {(['daily', 'weekly', 'monthly'] as ReportPeriod[]).map(p => (
                   <button key={p} onClick={() => setReportPeriod(p)} className={`flex-1 sm:px-4 py-2 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest transition-all ${reportPeriod === p ? 'bg-slate-400 text-white shadow-md' : 'text-slate-400'}`}>{p}</button>
                   ))}
                </div>
@@ -571,10 +571,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
          <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 overflow-hidden flex flex-col min-h-[500px]">
             <div className="px-10 py-8 border-b border-slate-50 flex flex-col lg:flex-row justify-between items-start lg:items-center shrink-0 gap-6">
                <div className="flex items-center gap-6">
-                  <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100">
-                     <button onClick={() => setAuditMode('SALES')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'SALES' ? 'bg-slate-400 text-white shadow-md italic' : 'text-slate-400 hover:text-slate-600'}`}>Sales Registry</button>
-                     <button onClick={() => setAuditMode('HISTORY')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'HISTORY' ? 'bg-slate-400 text-white shadow-md italic' : 'text-slate-400 hover:text-slate-600'}`}>Order History</button>
-                  </div>
                   <div className="flex items-center bg-sky-50 border-2 border-sky-200 rounded-full px-4 py-1.5 shadow-sm">
                      <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="text-sky-600 hover:text-sky-800 disabled:opacity-30 p-1"><i className="fas fa-chevron-left text-[10px]"></i></button>
                      <span className="mx-4 text-[10px] font-black text-sky-600 uppercase tracking-widest">TURN {currentPage} OF {totalPages}</span>

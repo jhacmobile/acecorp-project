@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { User, Order, OrderStatus, Store, PaymentMethod, ReceivablePayment, AccountsReceivable } from '../types';
+import { PICKUP_CUSTOMER } from '../constants';
 import CustomDatePicker from './CustomDatePicker';
 import AceCorpLogo from './AceCorpLogo';
 
@@ -138,8 +140,8 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     let base = auditMode === 'HISTORY' ? nodeOrders : stats.dailyOrders;
     if (statusFilter !== 'ALL') base = base.filter(o => o.status === statusFilter);
     if (paymentFilter !== 'ALL') base = base.filter(o => o.paymentMethod === paymentFilter);
-    if (orderTypeFilter === 'PICKUP') base = base.filter(o => o.customerId === 'PICKUP-CUST');
-    if (orderTypeFilter === 'DELIVERY') base = base.filter(o => o.customerId !== 'PICKUP-CUST');
+    if (orderTypeFilter === 'PICKUP') base = base.filter(o => o.customerId === PICKUP_CUSTOMER.id);
+    if (orderTypeFilter === 'DELIVERY') base = base.filter(o => o.customerId !== PICKUP_CUSTOMER.id);
     
     if (searchQuery) {
         const q = searchQuery.toLowerCase();
@@ -322,7 +324,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
       `}</style>
 
       {/* FULL AUDIT REPORT PRINT ROOT - Moved to Portal */}
-      {createPortal(
+      {ReactDOM.createPortal(
         <div id="audit-manifest-report-root" className="hidden">
            <div className="p-0 bg-white relative">
               {/* Professional Watermark */}
@@ -394,7 +396,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                       {auditMode === 'SALES' || auditMode === 'HISTORY' ? (
+                       {auditMode === 'SALES' ? (
                           stats.dailyOrders.map(o => (
                              <tr key={o.id} className="hover:bg-slate-50">
                                 <td className="py-4 font-mono text-slate-500">{new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
@@ -449,7 +451,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
       )}
 
       {/* RECEIPT PRINT ROOT - Moved to Portal */}
-      {createPortal(
+      {ReactDOM.createPortal(
         <div id="audit-receipt-print-root" className="hidden">
           {selectedOrder && (
             <div className="w-[80mm] bg-white">
@@ -518,7 +520,6 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                      <div className="grid grid-cols-1 gap-2 p-1.5 bg-slate-50 rounded-[24px] border border-slate-100">
                         <button onClick={() => setAuditMode('SALES')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'SALES' ? 'bg-slate-400 text-white shadow-lg italic' : 'text-slate-400 hover:text-slate-600'}`}>Sales Registry</button>
                         <button onClick={() => setAuditMode('AR_COLLECTION')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'AR_COLLECTION' ? 'bg-slate-400 text-white shadow-lg italic' : 'text-slate-400 hover:text-slate-600'}`}>AR Collections</button>
-                        <button onClick={() => setAuditMode('HISTORY')} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${auditMode === 'HISTORY' ? 'bg-slate-400 text-white shadow-lg italic' : 'text-slate-400 hover:text-slate-600'}`}>Order History</button>
                      </div>
                   </div>
 

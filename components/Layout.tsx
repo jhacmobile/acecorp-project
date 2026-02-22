@@ -268,7 +268,7 @@ const Layout: React.FC<LayoutProps> = ({ user, users, messages, stores, activeTa
                    </div>
                  )}
 
-                 {onTogglePOSHistory && activeTab === 'pos' && (
+                 {onTogglePOSHistory && !isCurrentlyBandi && (
                     <button 
                       onClick={onTogglePOSHistory}
                       className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/5 text-slate-400 flex items-center justify-center hover:text-sky-400 transition-all"

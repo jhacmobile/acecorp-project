@@ -9,6 +9,7 @@ import Inventory from './components/Inventory';
 import HRManagement from './components/HRManagement';
 import Admin from './components/Admin';
 import BandiPage from './components/BandiPage';
+import HistoryRegistry from './components/HistoryRegistry';
 import { supabase, hasValidConfig } from './supabaseClient';
 import { DEFAULT_USER_ACCESS, PICKUP_CUSTOMER } from './constants';
 import AceCorpLogo from './components/AceCorpLogo';
@@ -73,10 +74,64 @@ const App = () => {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'pending'>('synced');
   const [showSyncToast, setShowSyncToast] = useState(false);
   const [showPOSHistory, setShowPOSHistory] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [isChatOpen, setIsChatOpen] = useState(false);
   
   const isSyncingRef = useRef(false);
   const lastSyncRef = useRef(0);
+
+  const performInventoryAdjustment = (items: OrderItem[], storeId: string, isReversal = false): Stock[] => {
+    const updated = [...stocks];
+    const factor = isReversal ? -1 : 1;
+
+    items.forEach(item => {
+      if (item.linkedReceivableId) return;
+      
+      const sIdx = updated.findIndex(s => String(s.productId) === String(item.productId) && String(s.storeId) === String(storeId));
+      if (sIdx > -1) {
+        updated[sIdx] = { 
+          ...updated[sIdx], 
+          quantity: updated[sIdx].quantity - (item.qty * factor) 
+        };
+      }
+
+      if (item.isExchange && item.productType === 'Refill') {
+        const refillProduct = products.find(p => String(p.id) === String(item.productId));
+        if (refillProduct) {
+          const targetEmptyName = (refillProduct.name + "-Emp").toLowerCase();
+          const emptyProduct = products.find(p => p.type === 'Empty Cylinders' && p.name.toLowerCase() === targetEmptyName);
+          if (emptyProduct) {
+             const eIdx = updated.findIndex(s => String(s.productId) === String(emptyProduct.id) && String(s.storeId) === String(storeId));
+             if (eIdx > -1) {
+                updated[eIdx] = { 
+                  ...updated[eIdx], 
+                  quantity: updated[eIdx].quantity + (item.qty * factor) 
+                };
+             }
+          }
+        }
+      }
+    });
+    return updated;
+  };
+
+  const handleVoidOrder = async (order: Order) => {
+    if (currentUser?.role !== UserRole.ADMIN) return alert("UNAUTHORIZED: Only Administrators can void transactions.");
+    if (order.status === OrderStatus.CANCELLED) return;
+    
+    if (window.confirm("VOID PROTOCOL: Permanently cancel this record and reverse inventory?")) {
+        try {
+            const nextStocks = performInventoryAdjustment(order.items, order.storeId, true);
+            const success = await handleManualSync(
+              orders.map(o => o.id === order.id ? { ...o, status: OrderStatus.CANCELLED, updatedAt: new Date().toISOString() } : o),
+              nextStocks
+            );
+            if (success) alert("VOID SUCCESS: Transaction cancelled and inventory reversed.");
+        } catch (err) {
+            alert("VOID FAILURE: System error during reversal.");
+        }
+    }
+  };
 
   const cleanData = (data: any): any => {
     return JSON.parse(JSON.stringify(data, (key, value) => 
@@ -511,7 +566,7 @@ const App = () => {
     if (!currentUser) return null;
     switch (activeTab) {
       case 'dashboard': return <Dashboard key="dashboard" user={currentUser} orders={orders} products={products} stocks={stocks} stores={stores} selectedStoreId={currentUser.selectedStoreId} receivables={receivables} receivablePayments={receivablePayments} logoUrl={settings.logoUrl} />;
-      case 'pos': return <POS key="pos" user={currentUser} stores={stores} onSwitchStore={onSwitchStore} customers={customers} setCustomers={setCustomers} products={products} stocks={stocks} setStocks={setStocks} orders={orders} setOrders={setOrders} employees={employees} showHistoryPanel={showPOSHistory} setShowHistoryPanel={setShowPOSHistory} receivables={receivables} onSync={(o, s, c, ar, rp) => handleManualSync(o, s, undefined, undefined, undefined, undefined, undefined, undefined, undefined, c, ar, rp)} logoUrl={settings.logoUrl} />;
+      case 'pos': return <POS key="pos" user={currentUser} stores={stores} onSwitchStore={onSwitchStore} customers={customers} setCustomers={setCustomers} products={products} stocks={stocks} setStocks={setStocks} orders={orders} setOrders={setOrders} employees={employees} showHistoryPanel={showPOSHistory} setShowHistoryPanel={setShowPOSHistory} onCustomerSelect={setSelectedCustomerId} receivables={receivables} onSync={(o, s, c, ar, rp) => handleManualSync(o, s, undefined, undefined, undefined, undefined, undefined, undefined, undefined, c, ar, rp)} logoUrl={settings.logoUrl} />;
       case 'sales': return <SalesReport key="sales" user={currentUser} orders={orders} setOrders={setOrders} expenses={expenses} setExpenses={setExpenses} products={products} stores={stores} receivables={receivables} receivablePayments={receivablePayments} logoUrl={settings.logoUrl} />;
       case 'inventory-products':
       case 'inventory-stocks':
@@ -582,6 +637,24 @@ const App = () => {
       isChatOpen={isChatOpen} setIsChatOpen={setIsChatOpen} onSendMessage={onSendMessage} onMarkAsRead={onMarkAsRead}
     >
       {renderContent()}
+      
+      {currentUser && (
+        <HistoryRegistry 
+          isOpen={showPOSHistory}
+          onClose={() => setShowPOSHistory(false)}
+          orders={orders}
+          stores={stores}
+          user={currentUser}
+          logoUrl={settings.logoUrl}
+          selectedCustomerId={selectedCustomerId}
+          onVoidOrder={handleVoidOrder}
+          onModifyOrder={(order) => {
+            setActiveTab('pos');
+            setShowPOSHistory(false);
+            // We can add more logic here to auto-load the order into POS if needed
+          }}
+        />
+      )}
     </Layout>
   );
 };
