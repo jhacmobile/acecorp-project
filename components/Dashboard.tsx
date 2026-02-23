@@ -268,72 +268,58 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden font-sans text-slate-900">
       <style>{`
-        @media print {
-          @page { 
-            size: auto; 
-            margin: 15mm; 
-          }
-          
-          html, body { 
-            height: auto !important; 
-            min-height: 0 !important;
-            overflow: visible !important; 
-            background: white !important; 
-            color: black !important; 
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          
-          /* Hide the main app container completely */
-          #root { display: none !important; }
-          
-          /* Show only the print roots which are now direct children of body */
-          body > #dashboard-all-orders-print-root,
-          body > #dashboard-receipt-print-root {
-            display: block !important;
-            position: static !important;
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: white !important;
-            height: auto !important;
-            min-height: 0 !important;
-            overflow: visible !important;
-            visibility: visible !important;
-          }
+  @media print {
+    @page { 
+      size: auto; 
+      margin: 15mm; 
+    }
+    
+    html, body { 
+      height: auto !important; 
+      min-height: 0 !important;
+      overflow: visible !important; 
+      background: white !important; 
+      color: black !important; 
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    
+    /* Hide main app container */
+    #root { display: none !important; }
 
-          /* Ensure table headers repeat and page breaks work */
-          table { 
-            width: 100% !important; 
-            border-collapse: collapse !important;
-            table-layout: auto !important;
-            page-break-inside: auto !important;
-            display: table !important;
-          }
-          thead { display: table-header-group !important; }
-          tbody { display: table-row-group !important; }
-          tr { page-break-inside: avoid !important; page-break-after: auto !important; display: table-row !important; }
-          td, th { page-break-inside: avoid !important; display: table-cell !important; }
-          
-          /* --- RECEIPT MODE --- */
-          body.printing-receipt #dashboard-receipt-print-root {
-            width: 80mm !important; 
-          }
-          
-          .receipt-copy { 
-             display: block !important;
-             page-break-after: always !important; 
-             break-after: page !important; 
-             width: 68mm !important;
-             margin: 0 auto !important;
-             position: relative !important;
-             overflow: hidden !important;
-          }
+    /* --- FIX FOR RECEIPT PRINT --- */
+    body.printing-receipt #dashboard-all-orders-print-root {
+      display: none !important; /* Hide sales report when printing receipt */
+    }
+    body.printing-receipt #dashboard-receipt-print-root {
+      display: block !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
 
-          /* Hide UI elements */
-          button, header, aside, nav, .no-print { display: none !important; }
-        }
-      `}</style>
+    /* Show sales report normally when not printing receipt */
+    body:not(.printing-receipt) #dashboard-all-orders-print-root {
+      display: block !important;
+    }
+    body:not(.printing-receipt) #dashboard-receipt-print-root {
+      display: none !important;
+    }
+
+    .receipt-copy { 
+       display: block !important;
+       page-break-after: always !important; 
+       break-after: page !important; 
+       width: 68mm !important;
+       margin: 0 auto !important;
+       position: relative !important;
+       overflow: hidden !important;
+    }
+
+    /* Hide UI elements */
+    button, header, aside, nav, .no-print { display: none !important; }
+  }
+`}</style>
 
       {/* FULL SALES REPORT PRINT ROOT - Moved to Portal */}
       {ReactDOM.createPortal(
