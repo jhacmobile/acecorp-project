@@ -491,50 +491,62 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   };
 
   const handleModifyOrder = () => {
+    if (!selectedHistoryOrder) return;
     const order = selectedHistoryOrder;
-    if (!order || order.status === OrderStatus.CANCELLED) return;
     
-    if (confirm(`MODIFY PROTOCOL: Reverse assets for ${order.id} and load into terminal?`)) {
+    if (order.status === OrderStatus.CANCELLED) {
+        alert("SYSTEM ERROR: Cannot modify a cancelled record.");
+        return;
+    }
+    
+    if (window.confirm(`MODIFY PROTOCOL: Reverse assets for ${order.id.slice(-8)} and load into terminal?`)) {
         try {
-            // DEEP CLONE items so we don't accidentally mutate state via reference 
+            // 1. Deep clone items to prevent React reference mutation crashes
             const itemsToLoad = order.items ? order.items.map(item => ({ ...item })) : [];
-            const nextStocks = performInventoryAdjustment(itemsToLoad, order.storeId, true);
             
+            // 2. Safely Reverse Inventory
+            const nextStocks = performInventoryAdjustment(itemsToLoad, order.storeId || String(user.selectedStoreId), true);
             setStocks(nextStocks);
+            
+            // 3. Load Terminal Cart
             setActiveCart(itemsToLoad);
             setPaymentMethod(order.paymentMethod || 'CASH');
             setOrderRemark(order.remark || '');
             
+            // 4. Safely Restore Customer Profile
             const contactStr = order.contact || '';
             setCustomerPhone(formatMobile(contactStr));
             
-            // Calculate a safe fallback for the unit discount mapping 
+            const validItemsCount = itemsToLoad.filter(i => i.isCylinder || i.productType === 'Refill').reduce((s, i) => s + (i.qty || 1), 0) || 1;
             const safeDiscount = (order.totalDiscount > 0 && itemsToLoad.length > 0)
-                ? (order.totalDiscount / (itemsToLoad.filter(i => i.isCylinder || i.productType === 'Refill').reduce((s, i) => s + i.qty, 0) || 1)).toFixed(2)
+                ? (order.totalDiscount / validItemsCount).toFixed(2)
                 : '0.00';
 
+            const custId = order.customerId ? String(order.customerId) : PICKUP_CUSTOMER.id;
+
             setCustomerData({
-                id: order.customerId || '',
-                firstName: (order.customerName || '').split(' ')[0] || '',
-                lastName: (order.customerName || '').split(' ').slice(1).join(' ') || '',
-                address: order.address || '',
-                city: order.city || '',
-                landmark: order.landmark || '',
+                id: custId,
+                firstName: (order.customerName || '').split(' ')[0] || 'PICKUP',
+                lastName: (order.customerName || '').split(' ').slice(1).join(' ') || 'CUSTOMER',
+                address: order.address || 'WALK-IN TERMINAL',
+                city: order.city || 'VARIOUS',
+                landmark: order.landmark || 'STATION',
                 discount: safeDiscount,
                 notes: ''
             });
 
-            // Properly restore the correct order type mode and assigned logistics
-            if (order.customerId === PICKUP_CUSTOMER.id) {
+            // 5. Restore Order Type Logic
+            if (custId === PICKUP_CUSTOMER.id) {
                 setOrderType('pickup');
                 onCustomerSelect?.(PICKUP_CUSTOMER.id);
             } else {
                 setOrderType('delivery');
-                onCustomerSelect?.(String(order.customerId));
+                onCustomerSelect?.(custId);
             }
 
-            if (order.riderName) {
-                const matchedRider = employees?.find(e => e.name === order.riderName);
+            // 6. Restore Assigned Logistics (If Delivery)
+            if (order.riderName && employees) {
+                const matchedRider = employees.find(e => e.name === order.riderName);
                 setSelectedRider(matchedRider || null);
                 setRiderSearchQuery(order.riderName);
             } else {
@@ -542,8 +554,10 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                 setRiderSearchQuery('');
             }
 
+            // 7. Track the edit and dismiss panel
             setEditingOrderId(order.id);
             setShowHistoryPanel(false);
+            
         } catch (err) {
             console.error("Modify Order Initialization Error:", err);
             alert("SYSTEM ALERT: Failed to load order for modification safely.");
@@ -556,7 +570,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
         const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
         for (const copy of sequence) {
             setPrintCopyType(copy);
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 150));
             window.print();
             await new Promise(resolve => setTimeout(resolve, 500));
         }
@@ -567,22 +581,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
            window.print();
         }, 150);
     }
-  };
-
-  const handleHistoryPrint = (e: React.MouseEvent, type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (!selectedHistoryOrder) return;
-    
-    // Explicitly buffer the order data for #pos-receipt-print-root
-    setCompletedOrder(selectedHistoryOrder);
-    
-    // Trigger the standardized print request queue after a tiny delay
-    // to guarantee React has flushed the DOM state
-    setTimeout(() => {
-        handlePrintRequest(type);
-    }, 50);
   };
 
   const generateReceiptPart = (order: Order, label: string) => {
@@ -637,18 +635,21 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   const handleVoidOrder = async () => {
     if (!isAdmin) return alert("UNAUTHORIZED: Only Administrators can void transactions.");
     
+    if (!selectedHistoryOrder) return;
     const orderToVoid = selectedHistoryOrder;
-    if (!orderToVoid || orderToVoid.status === OrderStatus.CANCELLED) return;
     
-    if (window.confirm("VOID PROTOCOL: Permanently cancel this record and reverse inventory?")) {
+    if (orderToVoid.status === OrderStatus.CANCELLED) {
+        alert("SYSTEM ERROR: Order is already cancelled.");
+        return;
+    }
+    
+    if (window.confirm(`VOID PROTOCOL: Permanently cancel this record and reverse inventory?`)) {
         try {
-            // Perform inventory reversal calculation (isReversal = true)
-            const nextStocks = performInventoryAdjustment(orderToVoid.items, orderToVoid.storeId, true);
+            const itemsToVoid = orderToVoid.items ? orderToVoid.items.map(item => ({ ...item })) : [];
+            const nextStocks = performInventoryAdjustment(itemsToVoid, orderToVoid.storeId || String(user.selectedStoreId), true);
             
-            // Detect all changed stock records to ensure Supabase updates all affected SKUs (Refills AND Empty Cylinders)
             const stocksToSync = nextStocks.filter(nextS => {
                 const prevS = stocks.find(s => s.id === nextS.id);
-                // We only need to sync the stocks that actually changed during this adjustment
                 return prevS && prevS.quantity !== nextS.quantity;
             });
             
@@ -671,7 +672,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                 arToSync.push({ ...existingAR, status: 'paid', outstandingAmount: 0, remarks: 'ORDER_VOIDED' });
             }
 
-            // Sync updated order status, adjusted stocks, and closed AR
             const syncSuccess = await onSync([cancelledOrder], stocksToSync, undefined, arToSync);
             if (!syncSuccess) {
                 alert("VOID COMPLETED LOCALLY: Sync failed.");
@@ -747,7 +747,9 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
             margin: 0 !important; 
             background: white !important; 
             color: black !important; 
-            z-index: 9999 !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
+            z-index: 99999 !important;
           }
           .receipt-copy { 
              display: block !important;
@@ -762,7 +764,8 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
       `}</style>
 
       {/* ROOT-LEVEL PRINTABLE AREA FOR CONTINUOUS ROLL */}
-      <div id="pos-receipt-print-root" className="hidden">
+      {/* Changed from display: none (hidden) to opacity-0 to ensure layout parses for Safari printing */}
+      <div id="pos-receipt-print-root" className="fixed top-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none z-[-1]">
         {completedOrder && (
           <div className="w-[80mm] bg-white">
              <div className="receipt-copy">{generateReceiptPart(completedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}</div>
@@ -989,12 +992,12 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                                </button>
                                <div className="flex flex-col gap-2">
                                    <div className="flex gap-2 h-1/2">
-                                       <button onClick={(e) => handleHistoryPrint(e, 'CUSTOMER')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Cust</button>
-                                       <button onClick={(e) => handleHistoryPrint(e, 'GATE')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Gate</button>
-                                       <button onClick={(e) => handleHistoryPrint(e, 'STORE')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Stor</button>
-                                       <button onClick={(e) => handleHistoryPrint(e, 'ALL')} className="flex-1 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-[8px] font-black uppercase transition-colors">All</button>
+                                       <button onClick={() => handlePrintRequest('CUSTOMER')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Cust</button>
+                                       <button onClick={() => handlePrintRequest('GATE')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Gate</button>
+                                       <button onClick={() => handlePrintRequest('STORE')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Stor</button>
+                                       <button onClick={() => handlePrintRequest('ALL')} className="flex-1 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-[8px] font-black uppercase transition-colors">All</button>
                                    </div>
-                                   <button onClick={(e) => handleHistoryPrint(e, 'ALL')} className="h-1/2 bg-[#0f172a] hover:bg-[#1e293b] text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg active:scale-95">
+                                   <button onClick={() => handlePrintRequest('ALL')} className="h-1/2 bg-[#0f172a] hover:bg-[#1e293b] text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg active:scale-95">
                                        <i className="fas fa-print"></i> Quick All
                                    </button>
                                </div>
