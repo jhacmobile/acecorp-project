@@ -77,8 +77,9 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     } catch (e) { return isoString?.split('T')[0] || ''; }
   };
 
-  const formatMobile = (val: string) => {
-    const d = val.replace(/\D/g, '').slice(0, 11);
+  const formatMobile = (val?: string) => {
+    if (!val) return '';
+    const d = String(val).replace(/\D/g, '').slice(0, 11);
     if (d.length <= 4) return d;
     if (d.length <= 7) return `${d.slice(0, 4)}-${d.slice(4)}`;
     return `${d.slice(0, 4)}-${d.slice(4, 7)}-${d.slice(7)}`;
@@ -489,32 +490,64 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     setActiveCart([...activeCart, debtItem]);
   };
 
-  const handleModifyOrder = (eOrOrder?: any) => {
-    let order: Order | null = selectedHistoryOrder;
-    if (eOrOrder && typeof eOrOrder === 'object' && !('nativeEvent' in eOrOrder)) {
-       order = eOrOrder as Order;
-    }
-    
+  const handleModifyOrder = () => {
+    const order = selectedHistoryOrder;
     if (!order || order.status === OrderStatus.CANCELLED) return;
+    
     if (confirm(`MODIFY PROTOCOL: Reverse assets for ${order.id} and load into terminal?`)) {
-        const nextStocks = performInventoryAdjustment(order.items, order.storeId, true);
-        setStocks(nextStocks);
-        setActiveCart(order.items);
-        setPaymentMethod(order.paymentMethod);
-        setOrderRemark(order.remark || '');
-        setCustomerPhone(formatMobile(order.contact));
-        setCustomerData({
-            id: order.customerId,
-            firstName: order.customerName.split(' ')[0] || '',
-            lastName: order.customerName.split(' ').slice(1).join(' ') || '',
-            address: order.address,
-            city: order.city,
-            landmark: order.landmark,
-            discount: (order.totalDiscount / (order.items.filter(i => i.isCylinder || i.productType === 'Refill').reduce((s,i)=>s+i.qty,0) || 1)).toFixed(2),
-            notes: ''
-        });
-        setEditingOrderId(order.id);
-        setShowHistoryPanel(false);
+        try {
+            // DEEP CLONE items so we don't accidentally mutate state via reference 
+            const itemsToLoad = order.items ? order.items.map(item => ({ ...item })) : [];
+            const nextStocks = performInventoryAdjustment(itemsToLoad, order.storeId, true);
+            
+            setStocks(nextStocks);
+            setActiveCart(itemsToLoad);
+            setPaymentMethod(order.paymentMethod || 'CASH');
+            setOrderRemark(order.remark || '');
+            
+            const contactStr = order.contact || '';
+            setCustomerPhone(formatMobile(contactStr));
+            
+            // Calculate a safe fallback for the unit discount mapping 
+            const safeDiscount = (order.totalDiscount > 0 && itemsToLoad.length > 0)
+                ? (order.totalDiscount / (itemsToLoad.filter(i => i.isCylinder || i.productType === 'Refill').reduce((s, i) => s + i.qty, 0) || 1)).toFixed(2)
+                : '0.00';
+
+            setCustomerData({
+                id: order.customerId || '',
+                firstName: (order.customerName || '').split(' ')[0] || '',
+                lastName: (order.customerName || '').split(' ').slice(1).join(' ') || '',
+                address: order.address || '',
+                city: order.city || '',
+                landmark: order.landmark || '',
+                discount: safeDiscount,
+                notes: ''
+            });
+
+            // Properly restore the correct order type mode and assigned logistics
+            if (order.customerId === PICKUP_CUSTOMER.id) {
+                setOrderType('pickup');
+                onCustomerSelect?.(PICKUP_CUSTOMER.id);
+            } else {
+                setOrderType('delivery');
+                onCustomerSelect?.(String(order.customerId));
+            }
+
+            if (order.riderName) {
+                const matchedRider = employees?.find(e => e.name === order.riderName);
+                setSelectedRider(matchedRider || null);
+                setRiderSearchQuery(order.riderName);
+            } else {
+                setSelectedRider(null);
+                setRiderSearchQuery('');
+            }
+
+            setEditingOrderId(order.id);
+            setShowHistoryPanel(false);
+        } catch (err) {
+            console.error("Modify Order Initialization Error:", err);
+            alert("SYSTEM ALERT: Failed to load order for modification safely.");
+        }
     }
   };
 
@@ -601,14 +634,10 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     );
   };
 
-  const handleVoidOrder = async (eOrOrder?: any) => {
+  const handleVoidOrder = async () => {
     if (!isAdmin) return alert("UNAUTHORIZED: Only Administrators can void transactions.");
     
-    let orderToVoid: Order | null = selectedHistoryOrder;
-    if (eOrOrder && typeof eOrOrder === 'object' && !('nativeEvent' in eOrOrder)) {
-       orderToVoid = eOrOrder as Order;
-    }
-    
+    const orderToVoid = selectedHistoryOrder;
     if (!orderToVoid || orderToVoid.status === OrderStatus.CANCELLED) return;
     
     if (window.confirm("VOID PROTOCOL: Permanently cancel this record and reverse inventory?")) {
@@ -955,7 +984,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                            </div>
 
                            <div className="grid grid-cols-3 gap-4 shrink-0 mt-auto pt-6 border-t border-slate-100">
-                               <button onClick={() => handleModifyOrder(selectedHistoryOrder)} disabled={selectedHistoryOrder.status === 'CANCELLED'} className="w-full bg-[#3b82f6] hover:bg-[#2563eb] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest py-6 shadow-lg active:scale-95 transition-all disabled:opacity-50">
+                               <button onClick={handleModifyOrder} disabled={selectedHistoryOrder.status === 'CANCELLED'} className="w-full bg-[#3b82f6] hover:bg-[#2563eb] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest py-6 shadow-lg active:scale-95 transition-all disabled:opacity-50">
                                    Modify Order
                                </button>
                                <div className="flex flex-col gap-2">
@@ -969,7 +998,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                                        <i className="fas fa-print"></i> Quick All
                                    </button>
                                </div>
-                               <button onClick={() => handleVoidOrder(selectedHistoryOrder)} disabled={selectedHistoryOrder.status === 'CANCELLED' || !isAdmin} className="w-full bg-white hover:bg-red-50 border-2 border-red-100 text-red-500 rounded-2xl text-[10px] font-black uppercase tracking-widest py-6 shadow-sm active:scale-95 transition-all disabled:opacity-50">
+                               <button onClick={handleVoidOrder} disabled={selectedHistoryOrder.status === 'CANCELLED' || !isAdmin} className="w-full bg-white hover:bg-red-50 border-2 border-red-100 text-red-500 rounded-2xl text-[10px] font-black uppercase tracking-widest py-6 shadow-sm active:scale-95 transition-all disabled:opacity-50">
                                    Void Order
                                </button>
                            </div>
