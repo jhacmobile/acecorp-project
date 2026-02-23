@@ -519,16 +519,26 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     }
   };
 
-  const handleReprint = (eOrOrder?: any) => {
-    let order: Order | null = selectedHistoryOrder;
-    if (eOrOrder && typeof eOrOrder === 'object' && !('nativeEvent' in eOrOrder)) {
-       order = eOrOrder as Order;
+  const handleHistoryPrint = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    if (!selectedHistoryOrder) return;
+    // Set the hidden print buffer order immediately
+    setCompletedOrder(selectedHistoryOrder);
+
+    // Run the print sequence relying on the established delays
+    if (type === 'ALL') {
+        const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
+        for (const copy of sequence) {
+            setPrintCopyType(copy);
+            await new Promise(resolve => setTimeout(resolve, 150));
+            window.print();
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        setPrintCopyType('ALL');
+    } else {
+        setPrintCopyType(type);
+        await new Promise(resolve => setTimeout(resolve, 150));
+        window.print();
     }
-    
-    if (!order) return;
-    setCompletedOrder(order);
-    setPrintCopyType('ALL');
-    setIsReceiptPreviewOpen(true);
   };
 
   const generateReceiptPart = (order: Order, label: string) => {
@@ -828,65 +838,148 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
 
       {showHistoryPanel && (
         <div className="fixed inset-0 z-[4000] flex justify-end bg-slate-950/60 backdrop-blur-sm animate-in fade-in no-print">
-           <div className="bg-white w-full max-w-[500px] h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 text-gray-900 border-l-4 border-sky-500">
-              <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-                 <div>
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">System Registry</h3>
-                    <span className="text-2xl font-black italic text-slate-800 uppercase tracking-tighter">Order History</span>
-                 </div>
-                 <button onClick={() => setShowHistoryPanel(false)} className="w-10 h-10 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors">
-                    <i className="fas fa-times"></i>
-                 </button>
-              </div>
-              <div className="p-6 border-b border-slate-100 bg-slate-50 flex flex-col gap-4 shrink-0">
-                 <div className="flex items-center gap-4">
-                    <input type="date" value={historyDate} onChange={e => setHistoryDate(e.target.value)} className="px-4 py-3 bg-white border border-slate-200 rounded-xl text-[11px] font-black uppercase outline-none focus:border-sky-500 shadow-sm text-slate-800 w-1/2" />
-                    <select value={historyStatusFilter} onChange={e => setHistoryStatusFilter(e.target.value)} className="px-4 py-3 bg-white border border-slate-200 rounded-xl text-[11px] font-black uppercase outline-none focus:border-sky-500 shadow-sm text-slate-800 w-1/2">
-                       <option value="ALL">All Status</option>
-                       <option value="ORDERED">Ordered</option>
-                       <option value="RECEIVABLE">Receivable</option>
-                       <option value="CANCELLED">Cancelled</option>
-                    </select>
-                 </div>
-                 <div className="flex bg-slate-200/50 p-1 rounded-xl shadow-inner">
-                    <button onClick={() => setHistoryTab('store')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'store' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>All Orders</button>
-                    <button onClick={() => setHistoryTab('pickup')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'pickup' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Pickup</button>
-                    <button onClick={() => setHistoryTab('delivery')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'delivery' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Delivery</button>
-                 </div>
-              </div>
-              <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 custom-scrollbar space-y-4">
-                 {filteredHistory.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full opacity-30 text-slate-400">
-                       <i className="fas fa-folder-open text-5xl mb-4"></i>
-                       <p className="text-[10px] font-black uppercase tracking-widest italic">No Records Found</p>
-                    </div>
-                 ) : (
-                    filteredHistory.map(order => (
-                       <div key={order.id} className={`p-5 rounded-[24px] border transition-all ${selectedHistoryOrder?.id === order.id ? 'bg-white border-sky-400 shadow-md ring-4 ring-sky-50' : 'bg-white border-slate-200 shadow-sm hover:border-sky-200 cursor-pointer'}`} onClick={() => setSelectedHistoryOrder(order)}>
-                          <div className="flex justify-between items-start mb-3">
-                             <div>
-                                <span className="text-[10px] font-black text-sky-600 uppercase tracking-widest bg-sky-50 px-2 py-1 rounded-md mb-2 inline-block border border-sky-100">Ref: {order.id.slice(-8)}</span>
-                                <h4 className="text-[14px] font-black uppercase italic text-slate-800 leading-tight">{order.customerName}</h4>
-                                <span className="text-[9px] font-bold text-slate-400 uppercase">{toPHDateString(order.createdAt)}</span>
-                             </div>
-                             <div className="text-right flex flex-col items-end">
-                                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${order.status === 'CANCELLED' ? 'bg-red-50 text-red-600 border border-red-100' : order.status === 'RECEIVABLE' ? 'bg-orange-50 text-orange-600 border border-orange-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'}`}>{order.status}</span>
-                                <p className="text-[14px] font-black italic text-slate-900 mt-2">₱{formatCurrency(order.totalAmount)}</p>
-                             </div>
-                          </div>
-                          {selectedHistoryOrder?.id === order.id && (
-                             <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2 animate-in slide-in-from-top-2">
-                                <button onClick={(e) => { e.stopPropagation(); handleReprint(order); }} className="flex-1 py-3 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-800 active:scale-95 transition-all"><i className="fas fa-print"></i> Reprint</button>
-                                <button onClick={(e) => { e.stopPropagation(); handleModifyOrder(order); }} disabled={order.status === 'CANCELLED'} className="flex-1 py-3 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-50"><i className="fas fa-edit"></i> Modify</button>
-                                {isAdmin && (
-                                   <button onClick={(e) => { e.stopPropagation(); handleVoidOrder(order); }} disabled={order.status === 'CANCELLED'} className="flex-1 py-3 bg-red-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-red-600 active:scale-95 transition-all disabled:opacity-50"><i className="fas fa-ban"></i> Void</button>
-                                )}
-                             </div>
-                          )}
+           <div className="bg-white w-full max-w-[1100px] h-full shadow-2xl flex flex-row animate-in slide-in-from-right duration-300 text-gray-900 rounded-l-[40px] overflow-hidden">
+               
+               {/* LEFT PANE - List & Filters */}
+               <div className="w-[45%] flex flex-col border-r border-slate-100 bg-white shrink-0">
+                   <div className="p-8 pb-6">
+                       <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-6">History Registry</h2>
+                       <div className="flex gap-2 mb-6">
+                           <button onClick={() => setHistoryTab('store')} className={`flex-1 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'store' ? 'bg-[#0ea5e9] text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Store</button>
+                           <button onClick={() => setHistoryTab('pickup')} className={`flex-1 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'pickup' ? 'bg-[#0ea5e9] text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Pickup</button>
+                           <button onClick={() => setHistoryTab('delivery')} className={`flex-1 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'delivery' ? 'bg-[#0ea5e9] text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Delivery</button>
+                           <button onClick={() => setHistoryTab('customer')} className={`flex-1 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'customer' ? 'bg-[#0ea5e9] text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Customer</button>
                        </div>
-                    ))
-                 )}
-              </div>
+                       <div className="flex flex-col gap-4">
+                           <div className="relative border border-slate-200 rounded-xl overflow-hidden shadow-sm focus-within:border-sky-500 transition-colors">
+                               <input type="date" value={historyDate} onChange={e => setHistoryDate(e.target.value)} className="w-full px-4 py-3 bg-white text-[11px] font-black uppercase outline-none text-slate-800" />
+                           </div>
+                           <div className="relative border border-slate-200 rounded-xl overflow-hidden shadow-sm focus-within:border-sky-500 transition-colors">
+                               <select value={historyStatusFilter} onChange={e => setHistoryStatusFilter(e.target.value)} className="w-full pl-4 pr-10 py-3 bg-white text-[11px] font-black uppercase outline-none text-slate-800 appearance-none">
+                                   <option value="ALL">All Status</option>
+                                   <option value="ORDERED">Ordered</option>
+                                   <option value="RECEIVABLE">Receivable</option>
+                                   <option value="CANCELLED">Cancelled</option>
+                               </select>
+                               <i className="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] pointer-events-none"></i>
+                           </div>
+                       </div>
+                   </div>
+                   <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-4 custom-scrollbar">
+                       {filteredHistory.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full opacity-30 text-slate-400">
+                               <i className="fas fa-folder-open text-5xl mb-4"></i>
+                               <p className="text-[10px] font-black uppercase tracking-widest italic">No Records Found</p>
+                            </div>
+                       ) : (
+                            filteredHistory.map(order => {
+                                const isSelected = selectedHistoryOrder?.id === order.id;
+                                return (
+                                <button key={order.id} onClick={() => setSelectedHistoryOrder(order)} className={`w-full text-left p-6 rounded-[24px] border-2 transition-all flex flex-col gap-4 ${isSelected ? 'bg-[#f0fdf4] border-[#86efac] shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300 shadow-sm'}`}>
+                                    <div className="flex justify-between items-start w-full">
+                                        <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">ID: {order.id.replace(/\D/g, '').slice(-8)}</span>
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{toPHDateString(order.createdAt)}</span>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-[13px] font-black uppercase italic text-slate-900 leading-tight">{order.customerName}</h4>
+                                    </div>
+                                    <div className="flex justify-between items-end w-full">
+                                        <span className="text-[15px] font-black text-slate-900">₱{formatCurrency(order.totalAmount)}</span>
+                                        <div className="flex gap-4 items-center">
+                                            <span className="text-[8px] font-black text-[#0ea5e9] uppercase tracking-widest">By: {order.createdBy}</span>
+                                            <span className={`text-[9px] font-black uppercase tracking-widest ${order.status === 'CANCELLED' ? 'text-red-500' : order.status === 'RECEIVABLE' ? 'text-orange-500' : 'text-[#10b981]'}`}>{order.status}</span>
+                                        </div>
+                                    </div>
+                                </button>
+                                );
+                            })
+                       )}
+                   </div>
+               </div>
+
+               {/* RIGHT PANE - Details */}
+               <div className="flex-1 flex flex-col bg-white border-l border-slate-100 relative p-8">
+                   <button onClick={() => setShowHistoryPanel(false)} className="absolute top-6 right-6 w-10 h-10 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors">
+                       <i className="fas fa-times"></i>
+                   </button>
+                   
+                   {selectedHistoryOrder ? (
+                       <div className="flex-1 flex flex-col h-full max-h-full">
+                           <div className="flex items-center gap-4 mb-8 shrink-0">
+                               <h2 className="text-3xl font-black italic uppercase tracking-tighter">Order Detail</h2>
+                               <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setIsReceiptPreviewOpen(true); }} className="px-5 py-2.5 bg-sky-50 text-sky-600 hover:bg-sky-100 rounded-full text-[9px] font-black uppercase tracking-widest transition-colors shadow-sm">View Receipt</button>
+                           </div>
+
+                           <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 mb-6">
+                               <div className="bg-slate-50/50 rounded-[32px] p-8 border border-slate-100 shadow-sm mb-6">
+                                   <div className="grid grid-cols-2 gap-8 mb-8">
+                                       <div>
+                                           <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Customer Profile</p>
+                                           <p className="text-[13px] font-black italic uppercase text-slate-900">{selectedHistoryOrder.customerName}</p>
+                                       </div>
+                                       <div className="text-right">
+                                           <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Operator (User ID)</p>
+                                           <p className="text-[13px] font-black italic uppercase text-slate-900">{selectedHistoryOrder.createdBy}</p>
+                                       </div>
+                                   </div>
+                                   <div className="mb-8">
+                                       <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Address</p>
+                                       <p className="text-[11px] font-black italic uppercase text-slate-700">{selectedHistoryOrder.address || 'N/A'}</p>
+                                   </div>
+                                   <div>
+                                       <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Settlement Method</p>
+                                       <p className="text-[11px] font-black italic uppercase text-[#10b981]">{selectedHistoryOrder.paymentMethod}</p>
+                                   </div>
+                               </div>
+
+                               <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-sm mb-6">
+                                   <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+                                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Asset Detail</p>
+                                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Value</p>
+                                   </div>
+                                   <div className="space-y-4">
+                                       {selectedHistoryOrder.items.map((item, idx) => (
+                                           <div key={idx} className="flex justify-between items-center">
+                                               <p className="text-[11px] font-black italic uppercase text-slate-900">{item.productName} (x{item.qty})</p>
+                                               <p className="text-[11px] font-black text-slate-900">₱{formatCurrency(item.total)}</p>
+                                           </div>
+                                       ))}
+                                   </div>
+                               </div>
+
+                               <div className="bg-[#0f172a] rounded-[32px] p-8 text-white flex justify-between items-center shadow-2xl">
+                                   <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Settlement Total</p>
+                                   <p className="text-3xl font-black italic tracking-tighter">₱{formatCurrency(selectedHistoryOrder.totalAmount)}</p>
+                               </div>
+                           </div>
+
+                           <div className="grid grid-cols-3 gap-4 shrink-0 mt-auto pt-6 border-t border-slate-100">
+                               <button onClick={() => handleModifyOrder(selectedHistoryOrder)} disabled={selectedHistoryOrder.status === 'CANCELLED'} className="w-full bg-[#3b82f6] hover:bg-[#2563eb] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest py-6 shadow-lg active:scale-95 transition-all disabled:opacity-50">
+                                   Modify Order
+                               </button>
+                               <div className="flex flex-col gap-2">
+                                   <div className="flex gap-2 h-1/2">
+                                       <button onClick={() => handleHistoryPrint('CUSTOMER')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Cust</button>
+                                       <button onClick={() => handleHistoryPrint('GATE')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Gate</button>
+                                       <button onClick={() => handleHistoryPrint('STORE')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Stor</button>
+                                       <button onClick={() => handleHistoryPrint('ALL')} className="flex-1 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-[8px] font-black uppercase transition-colors">All</button>
+                                   </div>
+                                   <button onClick={() => handleHistoryPrint('ALL')} className="h-1/2 bg-[#0f172a] hover:bg-[#1e293b] text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg active:scale-95">
+                                       <i className="fas fa-print"></i> Quick All
+                                   </button>
+                               </div>
+                               <button onClick={() => handleVoidOrder(selectedHistoryOrder)} disabled={selectedHistoryOrder.status === 'CANCELLED' || !isAdmin} className="w-full bg-white hover:bg-red-50 border-2 border-red-100 text-red-500 rounded-2xl text-[10px] font-black uppercase tracking-widest py-6 shadow-sm active:scale-95 transition-all disabled:opacity-50">
+                                   Void Order
+                               </button>
+                           </div>
+                       </div>
+                   ) : (
+                       <div className="flex-1 flex flex-col items-center justify-center opacity-30 text-slate-400">
+                           <i className="fas fa-receipt text-6xl mb-6"></i>
+                           <p className="text-[12px] font-black uppercase tracking-widest italic">Select a registry entry</p>
+                       </div>
+                   )}
+               </div>
            </div>
         </div>
       )}
