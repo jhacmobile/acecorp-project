@@ -55,7 +55,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   const [historyDate, setHistoryDate] = useState(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
   const [historyStatusFilter, setHistoryStatusFilter] = useState<string>('ALL');
   const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<Order | null>(null);
-  const [showHistoryReceipt, setShowHistoryReceipt] = useState(false);
 
   const suggestionContainerRef = useRef<HTMLDivElement>(null);
   const riderDropdownRef = useRef<HTMLDivElement>(null);
@@ -519,26 +518,38 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     }
   };
 
-  const handleHistoryPrint = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    if (!selectedHistoryOrder) return;
-    // Set the hidden print buffer order immediately
-    setCompletedOrder(selectedHistoryOrder);
-
-    // Run the print sequence relying on the established delays
+  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
     if (type === 'ALL') {
         const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
         for (const copy of sequence) {
             setPrintCopyType(copy);
-            await new Promise(resolve => setTimeout(resolve, 150));
+            await new Promise(resolve => setTimeout(resolve, 100));
             window.print();
             await new Promise(resolve => setTimeout(resolve, 500));
         }
         setPrintCopyType('ALL');
     } else {
         setPrintCopyType(type);
-        await new Promise(resolve => setTimeout(resolve, 150));
-        window.print();
+        setTimeout(() => {
+           window.print();
+        }, 150);
     }
+  };
+
+  const handleHistoryPrint = (e: React.MouseEvent, type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!selectedHistoryOrder) return;
+    
+    // Explicitly buffer the order data for #pos-receipt-print-root
+    setCompletedOrder(selectedHistoryOrder);
+    
+    // Trigger the standardized print request queue after a tiny delay
+    // to guarantee React has flushed the DOM state
+    setTimeout(() => {
+        handlePrintRequest(type);
+    }, 50);
   };
 
   const generateReceiptPart = (order: Order, label: string) => {
@@ -588,24 +599,6 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
           </div>
        </div>
     );
-  };
-
-  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    if (type === 'ALL') {
-        const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
-        for (const copy of sequence) {
-            setPrintCopyType(copy);
-            await new Promise(resolve => setTimeout(resolve, 100));
-            window.print();
-            await new Promise(resolve => setTimeout(resolve, 500));
-        }
-        setPrintCopyType('ALL');
-    } else {
-        setPrintCopyType(type);
-        setTimeout(() => {
-           window.print();
-        }, 150);
-    }
   };
 
   const handleVoidOrder = async (eOrOrder?: any) => {
@@ -815,7 +808,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
            <div className="bg-white w-full max-w-[440px] rounded-[48px] p-10 shadow-2xl animate-in zoom-in duration-300 relative flex flex-col max-h-[90vh]">
               <div className="flex justify-between items-center mb-6">
                  <h3 className="text-xl font-black uppercase italic tracking-tighter text-slate-900">Receipt Preview</h3>
-                 <button onClick={() => { setIsReceiptPreviewOpen(false); setCompletedOrder(null); }} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors"><i className="fas fa-times"></i></button>
+                 <button onClick={() => setIsReceiptPreviewOpen(false)} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors"><i className="fas fa-times"></i></button>
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar mb-6 bg-white border border-slate-200 shadow-inner rounded-xl p-6">
                  <div className="receipt-container font-mono text-black text-center text-[10px] w-full pt-2">
@@ -830,7 +823,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                     <button onClick={() => handlePrintRequest('ALL')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'ALL' ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-900 border-slate-200'}`}>ALL</button>
                  </div>
                  <button onClick={() => handlePrintRequest(printCopyType)} className="w-full py-4 bg-sky-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Print</button>
-                 <button onClick={() => { setIsReceiptPreviewOpen(false); setCompletedOrder(null); }} className="w-full py-4 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all">Dismiss View</button>
+                 <button onClick={() => setIsReceiptPreviewOpen(false)} className="w-full py-4 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all">Dismiss View</button>
               </div>
            </div>
         </div>
@@ -875,7 +868,15 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                             filteredHistory.map(order => {
                                 const isSelected = selectedHistoryOrder?.id === order.id;
                                 return (
-                                <button key={order.id} onClick={() => setSelectedHistoryOrder(order)} className={`w-full text-left p-6 rounded-[24px] border-2 transition-all flex flex-col gap-4 ${isSelected ? 'bg-[#f0fdf4] border-[#86efac] shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300 shadow-sm'}`}>
+                                <button 
+                                  key={order.id} 
+                                  onClick={() => { 
+                                    setSelectedHistoryOrder(order); 
+                                    // PRE-LOAD the print buffer immediately to guarantee DOM readiness for prints
+                                    setCompletedOrder(order); 
+                                  }} 
+                                  className={`w-full text-left p-6 rounded-[24px] border-2 transition-all flex flex-col gap-4 ${isSelected ? 'bg-[#f0fdf4] border-[#86efac] shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300 shadow-sm'}`}
+                                >
                                     <div className="flex justify-between items-start w-full">
                                         <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">ID: {order.id.replace(/\D/g, '').slice(-8)}</span>
                                         <span className="text-[9px] font-bold text-slate-400 uppercase">{toPHDateString(order.createdAt)}</span>
@@ -907,7 +908,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                        <div className="flex-1 flex flex-col h-full max-h-full">
                            <div className="flex items-center gap-4 mb-8 shrink-0">
                                <h2 className="text-3xl font-black italic uppercase tracking-tighter">Order Detail</h2>
-                               <button onClick={() => { setCompletedOrder(selectedHistoryOrder); setIsReceiptPreviewOpen(true); }} className="px-5 py-2.5 bg-sky-50 text-sky-600 hover:bg-sky-100 rounded-full text-[9px] font-black uppercase tracking-widest transition-colors shadow-sm">View Receipt</button>
+                               <button onClick={() => setIsReceiptPreviewOpen(true)} className="px-5 py-2.5 bg-sky-50 text-sky-600 hover:bg-sky-100 rounded-full text-[9px] font-black uppercase tracking-widest transition-colors shadow-sm">View Receipt</button>
                            </div>
 
                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 mb-6">
@@ -959,12 +960,12 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                                </button>
                                <div className="flex flex-col gap-2">
                                    <div className="flex gap-2 h-1/2">
-                                       <button onClick={() => handleHistoryPrint('CUSTOMER')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Cust</button>
-                                       <button onClick={() => handleHistoryPrint('GATE')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Gate</button>
-                                       <button onClick={() => handleHistoryPrint('STORE')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Stor</button>
-                                       <button onClick={() => handleHistoryPrint('ALL')} className="flex-1 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-[8px] font-black uppercase transition-colors">All</button>
+                                       <button onClick={(e) => handleHistoryPrint(e, 'CUSTOMER')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Cust</button>
+                                       <button onClick={(e) => handleHistoryPrint(e, 'GATE')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Gate</button>
+                                       <button onClick={(e) => handleHistoryPrint(e, 'STORE')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Stor</button>
+                                       <button onClick={(e) => handleHistoryPrint(e, 'ALL')} className="flex-1 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-[8px] font-black uppercase transition-colors">All</button>
                                    </div>
-                                   <button onClick={() => handleHistoryPrint('ALL')} className="h-1/2 bg-[#0f172a] hover:bg-[#1e293b] text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg active:scale-95">
+                                   <button onClick={(e) => handleHistoryPrint(e, 'ALL')} className="h-1/2 bg-[#0f172a] hover:bg-[#1e293b] text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg active:scale-95">
                                        <i className="fas fa-print"></i> Quick All
                                    </button>
                                </div>
