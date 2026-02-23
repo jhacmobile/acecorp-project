@@ -490,8 +490,12 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     setActiveCart([...activeCart, debtItem]);
   };
 
-  const handleModifyOrder = () => {
-    const order = selectedHistoryOrder;
+  const handleModifyOrder = (eOrOrder?: any) => {
+    let order: Order | null = selectedHistoryOrder;
+    if (eOrOrder && typeof eOrOrder === 'object' && !('nativeEvent' in eOrOrder)) {
+       order = eOrOrder as Order;
+    }
+    
     if (!order || order.status === OrderStatus.CANCELLED) return;
     if (confirm(`MODIFY PROTOCOL: Reverse assets for ${order.id} and load into terminal?`)) {
         const nextStocks = performInventoryAdjustment(order.items, order.storeId, true);
@@ -515,9 +519,14 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     }
   };
 
-  const handleReprint = () => {
-    if (!selectedHistoryOrder) return;
-    setCompletedOrder(selectedHistoryOrder);
+  const handleReprint = (eOrOrder?: any) => {
+    let order: Order | null = selectedHistoryOrder;
+    if (eOrOrder && typeof eOrOrder === 'object' && !('nativeEvent' in eOrOrder)) {
+       order = eOrOrder as Order;
+    }
+    
+    if (!order) return;
+    setCompletedOrder(order);
     setPrintCopyType('ALL');
     setIsReceiptPreviewOpen(true);
   };
@@ -589,10 +598,14 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     }
   };
 
-  const handleVoidOrder = async () => {
+  const handleVoidOrder = async (eOrOrder?: any) => {
     if (!isAdmin) return alert("UNAUTHORIZED: Only Administrators can void transactions.");
     
-    const orderToVoid = selectedHistoryOrder;
+    let orderToVoid: Order | null = selectedHistoryOrder;
+    if (eOrOrder && typeof eOrOrder === 'object' && !('nativeEvent' in eOrOrder)) {
+       orderToVoid = eOrOrder as Order;
+    }
+    
     if (!orderToVoid || orderToVoid.status === OrderStatus.CANCELLED) return;
     
     if (window.confirm("VOID PROTOCOL: Permanently cancel this record and reverse inventory?")) {
@@ -808,6 +821,71 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                  </div>
                  <button onClick={() => handlePrintRequest(printCopyType)} className="w-full py-4 bg-sky-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Print</button>
                  <button onClick={() => { setIsReceiptPreviewOpen(false); setCompletedOrder(null); }} className="w-full py-4 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all">Dismiss View</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {showHistoryPanel && (
+        <div className="fixed inset-0 z-[4000] flex justify-end bg-slate-950/60 backdrop-blur-sm animate-in fade-in no-print">
+           <div className="bg-white w-full max-w-[500px] h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 text-gray-900 border-l-4 border-sky-500">
+              <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                 <div>
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">System Registry</h3>
+                    <span className="text-2xl font-black italic text-slate-800 uppercase tracking-tighter">Order History</span>
+                 </div>
+                 <button onClick={() => setShowHistoryPanel(false)} className="w-10 h-10 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors">
+                    <i className="fas fa-times"></i>
+                 </button>
+              </div>
+              <div className="p-6 border-b border-slate-100 bg-slate-50 flex flex-col gap-4 shrink-0">
+                 <div className="flex items-center gap-4">
+                    <input type="date" value={historyDate} onChange={e => setHistoryDate(e.target.value)} className="px-4 py-3 bg-white border border-slate-200 rounded-xl text-[11px] font-black uppercase outline-none focus:border-sky-500 shadow-sm text-slate-800 w-1/2" />
+                    <select value={historyStatusFilter} onChange={e => setHistoryStatusFilter(e.target.value)} className="px-4 py-3 bg-white border border-slate-200 rounded-xl text-[11px] font-black uppercase outline-none focus:border-sky-500 shadow-sm text-slate-800 w-1/2">
+                       <option value="ALL">All Status</option>
+                       <option value="ORDERED">Ordered</option>
+                       <option value="RECEIVABLE">Receivable</option>
+                       <option value="CANCELLED">Cancelled</option>
+                    </select>
+                 </div>
+                 <div className="flex bg-slate-200/50 p-1 rounded-xl shadow-inner">
+                    <button onClick={() => setHistoryTab('store')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'store' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>All Orders</button>
+                    <button onClick={() => setHistoryTab('pickup')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'pickup' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Pickup</button>
+                    <button onClick={() => setHistoryTab('delivery')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'delivery' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Delivery</button>
+                 </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 custom-scrollbar space-y-4">
+                 {filteredHistory.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full opacity-30 text-slate-400">
+                       <i className="fas fa-folder-open text-5xl mb-4"></i>
+                       <p className="text-[10px] font-black uppercase tracking-widest italic">No Records Found</p>
+                    </div>
+                 ) : (
+                    filteredHistory.map(order => (
+                       <div key={order.id} className={`p-5 rounded-[24px] border transition-all ${selectedHistoryOrder?.id === order.id ? 'bg-white border-sky-400 shadow-md ring-4 ring-sky-50' : 'bg-white border-slate-200 shadow-sm hover:border-sky-200 cursor-pointer'}`} onClick={() => setSelectedHistoryOrder(order)}>
+                          <div className="flex justify-between items-start mb-3">
+                             <div>
+                                <span className="text-[10px] font-black text-sky-600 uppercase tracking-widest bg-sky-50 px-2 py-1 rounded-md mb-2 inline-block border border-sky-100">Ref: {order.id.slice(-8)}</span>
+                                <h4 className="text-[14px] font-black uppercase italic text-slate-800 leading-tight">{order.customerName}</h4>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase">{toPHDateString(order.createdAt)}</span>
+                             </div>
+                             <div className="text-right flex flex-col items-end">
+                                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${order.status === 'CANCELLED' ? 'bg-red-50 text-red-600 border border-red-100' : order.status === 'RECEIVABLE' ? 'bg-orange-50 text-orange-600 border border-orange-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'}`}>{order.status}</span>
+                                <p className="text-[14px] font-black italic text-slate-900 mt-2">₱{formatCurrency(order.totalAmount)}</p>
+                             </div>
+                          </div>
+                          {selectedHistoryOrder?.id === order.id && (
+                             <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2 animate-in slide-in-from-top-2">
+                                <button onClick={(e) => { e.stopPropagation(); handleReprint(order); }} className="flex-1 py-3 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-800 active:scale-95 transition-all"><i className="fas fa-print"></i> Reprint</button>
+                                <button onClick={(e) => { e.stopPropagation(); handleModifyOrder(order); }} disabled={order.status === 'CANCELLED'} className="flex-1 py-3 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-50"><i className="fas fa-edit"></i> Modify</button>
+                                {isAdmin && (
+                                   <button onClick={(e) => { e.stopPropagation(); handleVoidOrder(order); }} disabled={order.status === 'CANCELLED'} className="flex-1 py-3 bg-red-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-red-600 active:scale-95 transition-all disabled:opacity-50"><i className="fas fa-ban"></i> Void</button>
+                                )}
+                             </div>
+                          )}
+                       </div>
+                    ))
+                 )}
               </div>
            </div>
         </div>
