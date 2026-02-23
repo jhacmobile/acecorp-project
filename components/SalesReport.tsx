@@ -166,7 +166,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
   const generateReceiptPart = (order: Order, label: string) => {
     const store = stores.find(s => s.id === order.storeId);
     return (
-       <div key={label} className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
+       <div className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
           <div className="w-48 h-auto max-h-32 mx-auto mb-4 overflow-hidden flex items-center justify-center">
              <AceCorpLogo customUrl={logoUrl} className="w-full h-auto" />
           </div>
@@ -212,23 +212,42 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
     );
   };
 
-  // FIXED: Changed to single trigger print for reliability
-  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    setPrintCopyType(type);
-    document.body.classList.add('printing-receipt');
-    
-    const style = document.createElement('style');
-    style.id = 'receipt-print-style';
-    style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
-    document.head.appendChild(style);
+  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    if (type === 'ALL') {
+      const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
+      for (const copy of sequence) {
+        setPrintCopyType(copy);
+        document.body.classList.add('printing-receipt');
+        const style = document.createElement('style');
+        style.id = 'receipt-print-style';
+        style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
+        document.head.appendChild(style);
 
-    // Give React time to update the Portal with all required copies
-    setTimeout(() => { 
-        window.print(); 
+        await new Promise(resolve => setTimeout(resolve, 200));
+        window.print();
+        
         document.body.classList.remove('printing-receipt');
         const injectedStyle = document.getElementById('receipt-print-style');
         if (injectedStyle) injectedStyle.remove();
-    }, 250);
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      setPrintCopyType('ALL');
+    } else {
+      document.body.classList.add('printing-receipt');
+      const style = document.createElement('style');
+      style.id = 'receipt-print-style';
+      style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
+      document.head.appendChild(style);
+
+      setPrintCopyType(type); 
+      setTimeout(() => { 
+         window.print(); 
+         document.body.classList.remove('printing-receipt');
+         const injectedStyle = document.getElementById('receipt-print-style');
+         if (injectedStyle) injectedStyle.remove();
+      }, 200);
+    }
   };
 
   const activeStore = stores.find(s => s.id === user.selectedStoreId);
@@ -435,28 +454,16 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
         document.body
       )}
 
-      {/* FIXED: Single-stream render for "ALL" prints */}
+      {/* RECEIPT PRINT ROOT - Moved to Portal */}
       {ReactDOM.createPortal(
-        <div id="audit-receipt-print-root" className="hidden">
-          {selectedOrder && (
-            <div className="w-[80mm] bg-white">
-               {printCopyType === 'ALL' ? (
-                  <>
-                    {generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}
-                    {generateReceiptPart(selectedOrder, 'GATE PASS')}
-                    {generateReceiptPart(selectedOrder, 'STORE COPY')}
-                  </>
-               ) : (
-                  generateReceiptPart(
-                    selectedOrder, 
-                    printCopyType === 'GATE' ? 'GATE PASS' : `${printCopyType} COPY`
-                  )
-               )}
-            </div>
-          )}
-        </div>,
-        document.body
-      )}
+  <div id="audit-receipt-print-root" className="hidden">
+    {selectedOrder && generateReceiptPart(
+      selectedOrder, 
+      printCopyType === 'ALL' ? 'CUSTOMER COPY' : (printCopyType === 'GATE' ? 'GATE PASS' : `${printCopyType} COPY`)
+    )}
+  </div>,
+  document.body
+)}
       
       {/* INTELLIGENCE HUB SUMMARY */}
       <div className="px-8 py-6 bg-slate-800 text-white flex flex-wrap items-center justify-between shadow-2xl relative overflow-hidden shrink-0 no-print">
@@ -651,15 +658,7 @@ const SalesReport: React.FC<SalesProps> = ({ user, orders, stores, receivables, 
                <div className="flex-1 overflow-y-auto p-10 custom-scrollbar bg-slate-50/30">
                   {showOrderReceipt ? (
                     <div className="bg-white p-10 shadow-xl border border-slate-200 mx-auto w-full max-w-[320px] text-black">
-                        {printCopyType === 'ALL' ? (
-                            <>
-                                {generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}
-                                {generateReceiptPart(selectedOrder, 'GATE PASS')}
-                                {generateReceiptPart(selectedOrder, 'STORE COPY')}
-                            </>
-                        ) : (
-                            generateReceiptPart(selectedOrder, printCopyType === 'GATE' ? 'GATE PASS' : `${printCopyType} COPY`)
-                        )}
+                        {generateReceiptPart(selectedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}
                     </div>
                   ) : (
                     <div className="space-y-8">
