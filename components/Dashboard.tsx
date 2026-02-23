@@ -179,7 +179,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
   const generateReceiptPart = (order: Order, label: string) => {
     const store = stores.find(s => s.id === order.storeId);
     return (
-       <div className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
+       <div key={label} className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
           <div className="w-48 h-auto max-h-32 mx-auto mb-4 overflow-hidden flex items-center justify-center">
              <AceCorpLogo customUrl={logoUrl} className="w-full h-auto" />
           </div>
@@ -225,42 +225,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     );
   };
 
-  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
-    if (type === 'ALL') {
-      const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
-      for (const copy of sequence) {
-        setPrintCopyType(copy);
-        document.body.classList.add('printing-receipt');
-        const style = document.createElement('style');
-        style.id = 'receipt-print-style';
-        style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
-        document.head.appendChild(style);
+  // UPDATED PRINT HANDLER (Non-looping, reliable trigger)
+  const handlePrintRequest = (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    setPrintCopyType(type);
+    document.body.classList.add('printing-receipt');
+    
+    const style = document.createElement('style');
+    style.id = 'receipt-print-style';
+    style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
+    document.head.appendChild(style);
 
-        await new Promise(resolve => setTimeout(resolve, 200));
-        window.print();
-        
+    // Timeout to ensure the Portal re-renders the correct copy or multiple copies
+    setTimeout(() => { 
+        window.print(); 
         document.body.classList.remove('printing-receipt');
         const injectedStyle = document.getElementById('receipt-print-style');
         if (injectedStyle) injectedStyle.remove();
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-      setPrintCopyType('ALL');
-    } else {
-      document.body.classList.add('printing-receipt');
-      const style = document.createElement('style');
-      style.id = 'receipt-print-style';
-      style.innerHTML = '@media print { @page { size: 80mm auto !important; margin: 0mm !important; } }';
-      document.head.appendChild(style);
-
-      setPrintCopyType(type); 
-      setTimeout(() => { 
-         window.print(); 
-         document.body.classList.remove('printing-receipt');
-         const injectedStyle = document.getElementById('receipt-print-style');
-         if (injectedStyle) injectedStyle.remove();
-      }, 200);
-    }
+    }, 250);
   };
 
   const COLORS = ['#38bdf8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -284,10 +265,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             padding: 0 !important;
           }
           
-          /* Hide the main app container completely */
           #root { display: none !important; }
-          
-          /* Show only the print roots which are now direct children of body */
+
           body > #dashboard-all-orders-print-root,
           body > #dashboard-receipt-print-root {
             display: block !important;
@@ -302,7 +281,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
             visibility: visible !important;
           }
 
-          /* Ensure table headers repeat and page breaks work */
           table { 
             width: 100% !important; 
             border-collapse: collapse !important;
@@ -315,9 +293,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
           tr { page-break-inside: avoid !important; page-break-after: auto !important; display: table-row !important; }
           td, th { page-break-inside: avoid !important; display: table-cell !important; }
           
-          /* --- RECEIPT MODE --- */
           body.printing-receipt #dashboard-receipt-print-root {
             width: 80mm !important; 
+          }
+          
+          body.printing-receipt #dashboard-all-orders-print-root {
+            display: none !important;
           }
           
           .receipt-copy { 
@@ -330,16 +311,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
              overflow: hidden !important;
           }
 
-          /* Hide UI elements */
           button, header, aside, nav, .no-print { display: none !important; }
         }
       `}</style>
 
-      {/* FULL SALES REPORT PRINT ROOT - Moved to Portal */}
       {ReactDOM.createPortal(
         <div id="dashboard-all-orders-print-root" className="hidden">
            <div className="p-0 bg-white relative">
-              {/* Professional Watermark */}
               <div className="absolute inset-0 flex items-center justify-center opacity-[0.02] pointer-events-none select-none overflow-hidden">
                  <h1 className="text-[140px] font-black uppercase -rotate-45 whitespace-nowrap">ACECORP OFFICIAL</h1>
               </div>
@@ -443,17 +421,22 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
         document.body
       )}
 
-      {/* RECEIPT PRINT ROOT - Moved to Portal */}
       {ReactDOM.createPortal(
         <div id="dashboard-receipt-print-root" className="hidden">
           {selectedOrder && (
             <div className="w-[80mm] bg-white">
-              <div className="receipt-copy">
-                {generateReceiptPart(
+              {printCopyType === 'ALL' ? (
+                <>
+                  {generateReceiptPart(selectedOrder, 'CUSTOMER COPY')}
+                  {generateReceiptPart(selectedOrder, 'GATE PASS')}
+                  {generateReceiptPart(selectedOrder, 'STORE COPY')}
+                </>
+              ) : (
+                generateReceiptPart(
                   selectedOrder, 
-                  printCopyType === 'ALL' ? 'CUSTOMER COPY' : (printCopyType === 'GATE' ? 'GATE PASS' : `${printCopyType} COPY`)
-                )}
-              </div>
+                  printCopyType === 'GATE' ? 'GATE PASS' : `${printCopyType} COPY`
+                )
+              )}
             </div>
           )}
         </div>,

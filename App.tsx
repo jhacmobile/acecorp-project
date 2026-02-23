@@ -201,15 +201,11 @@ const App = () => {
           const ninetyDaysAgo = new Date();
           ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
           
-          // Request Fingerprinting: Defeat Chrome disk cache by ensuring the query URL is unique.
-          // We use a redundant ID filter to break the cache without affecting the result set.
-          const fingerprint = `bust_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-          
           const { data, error } = await supabase.from('orders')
-            .select('*') // Select all columns to ensure mapping doesn't miss new data
+            .select('id, store_id, customer_id, customer_name, address, city, contact, landmark, items, total_amount, total_discount, status, payment_method, created_at, updated_at, created_by, modified_by, remark, returned_cylinder, rider_id, rider_name')
             .gte('created_at', ninetyDaysAgo.toISOString().split('.')[0])
-            .neq('id', fingerprint) 
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false })
+            .limit(1000);
             
           return error ? [] : data;
         } catch (e: any) {
@@ -344,17 +340,17 @@ const App = () => {
     
     const handleRevalidation = () => {
       if (document.visibilityState === 'visible') {
-        // Trigger a forced re-validation when the user returns to the tab
-        fetchData(undefined, false, true);
+        // Only revalidate if we haven't synced in the last 30 seconds
+        if (Date.now() - lastSyncRef.current > 30000) {
+          fetchData(undefined, false, false);
+        }
       }
     };
 
     window.addEventListener('visibilitychange', handleRevalidation);
-    window.addEventListener('focus', handleRevalidation);
     
     return () => {
       window.removeEventListener('visibilitychange', handleRevalidation);
-      window.removeEventListener('focus', handleRevalidation);
     };
   }, [fetchData]);
 
