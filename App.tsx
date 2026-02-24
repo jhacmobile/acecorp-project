@@ -76,6 +76,11 @@ const App = () => {
   const [showPOSHistory, setShowPOSHistory] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [orderToModify, setOrderToModify] = useState<Order | null>(null);
+  
+  const [printOrder, setPrintOrder] = useState<Order | null>(null);
+  const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
+  const [isPrinting, setIsPrinting] = useState(false);
   
   const isSyncingRef = useRef(false);
   const lastSyncRef = useRef(0);
@@ -558,11 +563,45 @@ const App = () => {
     localStorage.setItem(SESSION_KEY, JSON.stringify(next));
   };
 
+  const handleReprint = async (order: Order, type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    setPrintOrder(order);
+    if (type === 'ALL') {
+      const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
+      for (const copy of sequence) {
+        setPrintCopyType(copy);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        window.print();
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      setPrintCopyType('ALL');
+    } else {
+      setPrintCopyType(type);
+      await new Promise(resolve => setTimeout(resolve, 200));
+      window.print();
+    }
+  };
+
+  const handleModifyOrder = async (order: Order) => {
+    if (order.status === OrderStatus.CANCELLED) return;
+    
+    // Reverse inventory first
+    const nextStocks = performInventoryAdjustment(order.items, order.storeId, true);
+    const success = await handleManualSync(undefined, nextStocks);
+    
+    if (success) {
+      setOrderToModify(order);
+      setActiveTab('pos');
+      setShowPOSHistory(false);
+    } else {
+      alert("Failed to reverse inventory for modification.");
+    }
+  };
+
   const renderContent = () => {
     if (!currentUser) return null;
     switch (activeTab) {
       case 'dashboard': return <Dashboard key="dashboard" user={currentUser} orders={orders} products={products} stocks={stocks} stores={stores} selectedStoreId={currentUser.selectedStoreId} receivables={receivables} receivablePayments={receivablePayments} logoUrl={settings.logoUrl} />;
-      case 'pos': return <POS key="pos" user={currentUser} stores={stores} onSwitchStore={onSwitchStore} customers={customers} setCustomers={setCustomers} products={products} stocks={stocks} setStocks={setStocks} orders={orders} setOrders={setOrders} employees={employees} showHistoryPanel={showPOSHistory} setShowHistoryPanel={setShowPOSHistory} onCustomerSelect={setSelectedCustomerId} receivables={receivables} onSync={(o, s, c, ar, rp) => handleManualSync(o, s, undefined, undefined, undefined, undefined, undefined, undefined, undefined, c, ar, rp)} logoUrl={settings.logoUrl} />;
+      case 'pos': return <POS key="pos" user={currentUser} stores={stores} onSwitchStore={onSwitchStore} customers={customers} setCustomers={setCustomers} products={products} stocks={stocks} setStocks={setStocks} orders={orders} setOrders={setOrders} employees={employees} onCustomerSelect={setSelectedCustomerId} receivables={receivables} onSync={(o, s, c, ar, rp) => handleManualSync(o, s, undefined, undefined, undefined, undefined, undefined, undefined, undefined, c, ar, rp)} logoUrl={settings.logoUrl} initialOrder={orderToModify} onClearModify={() => setOrderToModify(null)} />;
       case 'sales': return <SalesReport key="sales" user={currentUser} orders={orders} setOrders={setOrders} expenses={expenses} setExpenses={setExpenses} products={products} stores={stores} receivables={receivables} receivablePayments={receivablePayments} logoUrl={settings.logoUrl} />;
       case 'inventory-products':
       case 'inventory-stocks':
@@ -644,13 +683,71 @@ const App = () => {
           logoUrl={settings.logoUrl}
           selectedCustomerId={selectedCustomerId}
           onVoidOrder={handleVoidOrder}
-          onModifyOrder={(order) => {
-            setActiveTab('pos');
-            setShowPOSHistory(false);
-            // We can add more logic here to auto-load the order into POS if needed
-          }}
+          onModifyOrder={handleModifyOrder}
+          onReprint={handleReprint}
         />
       )}
+      {/* ROOT-LEVEL PRINTABLE AREA FOR CONTINUOUS ROLL */}
+      <div id="pos-receipt-print-root" className="hidden">
+        {printOrder && (
+          <div className="w-[80mm] bg-white">
+            <div className="receipt-copy">
+              {(() => {
+                const order = printOrder;
+                const label = `${printCopyType} COPY`;
+                const store = stores.find(s => s.id === order.storeId);
+                const formatCurrency = (amount: number) => amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                
+                return (
+                  <div className="receipt-copy font-mono text-black text-center text-[10px] w-[68mm] mx-auto pt-2 pb-12">
+                    <div className="w-48 h-auto max-h-32 mx-auto mb-4 overflow-hidden flex items-center justify-center">
+                       <AceCorpLogo customUrl={settings.logoUrl} className="w-full h-auto" />
+                    </div>
+                    <div className="border border-black px-4 py-1 inline-block mb-2">
+                       <h3 className="text-[12px] font-black uppercase tracking-widest">{label}</h3>
+                    </div>
+                    <h4 className="text-sm font-black uppercase italic leading-none mb-1 text-black">{store?.name || 'ACECORP'}</h4>
+                    <p className="text-[10px] uppercase font-bold leading-tight text-black">{store?.address || ''}</p>
+                    <p className="text-[10px] uppercase font-bold text-black">{store?.mobile || ''}</p>
+                    <div className="border-b border-black border-dashed my-2"></div>
+                    <div className="text-left font-bold space-y-0.5 uppercase text-[10px] text-black">
+                       <div className="flex gap-1"><span>Ref:</span> <span>{order.id.slice(-8)}</span></div>
+                       <div className="flex gap-1"><span>Date:</span> <span>{new Date(order.createdAt).toLocaleDateString()}</span></div>
+                       <div className="flex gap-1"><span>Operator:</span> <span>{order.createdBy}</span></div>
+                       {order.riderName && <div className="flex gap-1"><span>Rider:</span> <span>{order.riderName}</span></div>}
+                       <div className="pt-2"><p className="font-black text-[11px] uppercase italic text-black leading-tight">{order.customerName}</p><p className="text-black leading-tight">{order.address}</p></div>
+                    </div>
+                    <div className="border-b border-black border-dashed my-2"></div>
+                    <div className="space-y-2 mb-4">
+                       {order.items.map((item, idx) => (
+                          <div key={idx}><div className="flex justify-between font-black uppercase italic text-[10px] text-black"><span>{item.productName} (x{item.qty})</span><span>₱{formatCurrency(item.total)}</span></div></div>
+                       ))}
+                    </div>
+                    <div className="border-b border-black border-dashed my-2"></div>
+                    <div className="flex justify-between font-bold uppercase mb-1 text-[10px] text-black"><span>Method:</span> <span>{order.paymentMethod}</span></div>
+                    {order.totalDiscount > 0 && (
+                        <div className="flex justify-between font-bold uppercase mb-1 text-[10px] text-black"><span>Discount:</span> <span>-₱{formatCurrency(order.totalDiscount)}</span></div>
+                    )}
+                    <div className="flex justify-between text-[14px] font-black italic uppercase text-black"><span>TOTAL:</span> <span>₱{formatCurrency(order.totalAmount)}</span></div>
+                    
+                    <div className="mt-6 pt-2 border-t border-black border-dashed text-center text-black space-y-2">
+                        <p className="font-black uppercase text-[10px]">Thank you for choosing AceCorp!</p>
+                        <div className="pt-6 pb-2">
+                            <p className="text-[10px] text-left border-b border-black inline-block w-full text-white">_</p>
+                            <p className="text-[9px] text-center font-black uppercase mt-1">CUSTOMER SIGNATURE</p>
+                        </div>
+                    </div>
+                    <div className="mt-4 pt-2 border-t border-black border-dashed text-center text-black">
+                        <p className="font-bold uppercase text-[9px]">OFFICIAL REGISTRY COPY</p>
+                        <p className="font-bold uppercase text-[8px] mt-1">System Timestamp: {new Date().toLocaleTimeString()}</p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+      </div>
     </Layout>
   );
 };

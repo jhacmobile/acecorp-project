@@ -16,18 +16,18 @@ interface POSProps {
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
   orders: Order[];
   employees: Employee[];
-  showHistoryPanel: boolean;
-  setShowHistoryPanel: React.Dispatch<React.SetStateAction<boolean>>;
   onCustomerSelect?: (id: string) => void;
   receivables?: AccountsReceivable[];
   onSync: (immediateOrders?: Order[], immediateStocks?: Stock[], immediateCustomers?: Customer[], immediateReceivables?: AccountsReceivable[], immediateReceivablePayments?: ReceivablePayment[]) => Promise<boolean>;
   logoUrl?: string;
+  initialOrder?: Order | null;
+  onClearModify?: () => void;
 }
 
 type OrderType = 'pickup' | 'delivery';
 type HistoryTab = 'store' | 'pickup' | 'delivery' | 'customer';
 
-const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCustomers, products, stocks, setStocks, orders, setOrders, employees, showHistoryPanel, setShowHistoryPanel, onCustomerSelect, receivables = [], onSync, logoUrl }) => {
+const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCustomers, products, stocks, setStocks, orders, setOrders, employees, onCustomerSelect, receivables = [], onSync, logoUrl, initialOrder, onClearModify }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTypeTab, setActiveTypeTab] = useState('ALL');
   const [activeCart, setActiveCart] = useState<OrderItem[]>([]);
@@ -55,6 +55,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
   const [historyDate, setHistoryDate] = useState(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
   const [historyStatusFilter, setHistoryStatusFilter] = useState<string>('ALL');
   const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<Order | null>(null);
+  const [showHistoryReceipt, setShowHistoryReceipt] = useState(false);
 
   const suggestionContainerRef = useRef<HTMLDivElement>(null);
   const riderDropdownRef = useRef<HTMLDivElement>(null);
@@ -77,9 +78,8 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     } catch (e) { return isoString?.split('T')[0] || ''; }
   };
 
-  const formatMobile = (val?: string) => {
-    if (!val) return '';
-    const d = String(val).replace(/\D/g, '').slice(0, 11);
+  const formatMobile = (val: string) => {
+    const d = val.replace(/\D/g, '').slice(0, 11);
     if (d.length <= 4) return d;
     if (d.length <= 7) return `${d.slice(0, 4)}-${d.slice(4)}`;
     return `${d.slice(0, 4)}-${d.slice(4, 7)}-${d.slice(7)}`;
@@ -261,6 +261,30 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
       return { success: false, finalId: '' };
     }
   };
+
+  useEffect(() => {
+    if (initialOrder) {
+      const order = initialOrder;
+      setActiveCart(order.items);
+      setPaymentMethod(order.paymentMethod);
+      setOrderRemark(order.remark || '');
+      setCustomerPhone(formatMobile(order.contact));
+      setCustomerData({
+          id: order.customerId,
+          firstName: order.customerName.split(' ')[0] || '',
+          lastName: order.customerName.split(' ').slice(1).join(' ') || '',
+          address: order.address,
+          city: order.city,
+          landmark: order.landmark,
+          discount: order.totalDiscount === 0 
+              ? '0.00' 
+              : (order.totalDiscount / (order.items.filter(i => i.isCylinder || i.productType === 'Refill').reduce((s,i)=>s+i.qty,0) || 1)).toFixed(2),
+          notes: ''
+      });
+      setEditingOrderId(order.id);
+      onClearModify?.();
+    }
+  }, [initialOrder]);
 
   const subtotal = useMemo(() => activeCart.reduce((s, i) => s + i.total, 0), [activeCart]);
   const profileUnitRate = useMemo(() => {
@@ -490,82 +514,51 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     setActiveCart([...activeCart, debtItem]);
   };
 
-  const handleModifyOrder = () => {
-    if (!selectedHistoryOrder) return;
-    const order = selectedHistoryOrder;
-    
-    if (order.status === OrderStatus.CANCELLED) {
-        alert("SYSTEM ERROR: Cannot modify a cancelled record.");
-        return;
+  const handleModifyOrder = async (eOrOrder?: any) => {
+    let order: Order | null = selectedHistoryOrder;
+    if (eOrOrder && typeof eOrOrder === 'object' && !('nativeEvent' in eOrOrder)) {
+       order = eOrOrder as Order;
     }
     
-    if (window.confirm(`MODIFY PROTOCOL: Reverse assets for ${order.id.slice(-8)} and load into terminal?`)) {
-        try {
-            // 1. Deep clone items to prevent React reference mutation crashes
-            const itemsToLoad = order.items ? order.items.map(item => ({ ...item })) : [];
-            
-            // 2. Safely Reverse Inventory
-            const nextStocks = performInventoryAdjustment(itemsToLoad, order.storeId || String(user.selectedStoreId), true);
-            setStocks(nextStocks);
-            
-            // 3. Load Terminal Cart
-            setActiveCart(itemsToLoad);
-            setPaymentMethod(order.paymentMethod || 'CASH');
-            setOrderRemark(order.remark || '');
-            
-            // 4. Safely Restore Customer Profile
-            const contactStr = order.contact || '';
-            setCustomerPhone(formatMobile(contactStr));
-            
-            const validItemsCount = itemsToLoad.filter(i => i.isCylinder || i.productType === 'Refill').reduce((s, i) => s + (i.qty || 1), 0) || 1;
-            const safeDiscount = (order.totalDiscount > 0 && itemsToLoad.length > 0)
-                ? (order.totalDiscount / validItemsCount).toFixed(2)
-                : '0.00';
+    if (!order || order.status === OrderStatus.CANCELLED) return;
 
-            const custId = order.customerId ? String(order.customerId) : PICKUP_CUSTOMER.id;
-
-            setCustomerData({
-                id: custId,
-                firstName: (order.customerName || '').split(' ')[0] || 'PICKUP',
-                lastName: (order.customerName || '').split(' ').slice(1).join(' ') || 'CUSTOMER',
-                address: order.address || 'WALK-IN TERMINAL',
-                city: order.city || 'VARIOUS',
-                landmark: order.landmark || 'STATION',
-                discount: safeDiscount,
-                notes: ''
-            });
-
-            // 5. Restore Order Type Logic
-            if (custId === PICKUP_CUSTOMER.id) {
-                setOrderType('pickup');
-                onCustomerSelect?.(PICKUP_CUSTOMER.id);
-            } else {
-                setOrderType('delivery');
-                onCustomerSelect?.(custId);
-            }
-
-            // 6. Restore Assigned Logistics (If Delivery)
-            if (order.riderName && employees) {
-                const matchedRider = employees.find(e => e.name === order.riderName);
-                setSelectedRider(matchedRider || null);
-                setRiderSearchQuery(order.riderName);
-            } else {
-                setSelectedRider(null);
-                setRiderSearchQuery('');
-            }
-
-            // 7. Track the edit and dismiss panel
-            setEditingOrderId(order.id);
-            setShowHistoryPanel(false);
-            
-        } catch (err) {
-            console.error("Modify Order Initialization Error:", err);
-            alert("SYSTEM ALERT: Failed to load order for modification safely.");
-        }
+    // Reversing stock movement as requested
+    const nextStocks = performInventoryAdjustment(order.items, order.storeId, true);
+    
+    // Sync the reversed stocks to the database immediately
+    const syncSuccess = await onSync(undefined, nextStocks);
+    
+    if (syncSuccess) {
+        setStocks(nextStocks);
+        setActiveCart(order.items);
+        setPaymentMethod(order.paymentMethod);
+        setOrderRemark(order.remark || '');
+        setCustomerPhone(formatMobile(order.contact));
+        setCustomerData({
+            id: order.customerId,
+            firstName: order.customerName.split(' ')[0] || '',
+            lastName: order.customerName.split(' ').slice(1).join(' ') || '',
+            address: order.address,
+            city: order.city,
+            landmark: order.landmark,
+            discount: order.totalDiscount === 0 
+                ? '0.00' 
+                : (order.totalDiscount / (order.items.filter(i => i.isCylinder || i.productType === 'Refill').reduce((s,i)=>s+i.qty,0) || 1)).toFixed(2),
+            notes: ''
+        });
+        setEditingOrderId(order.id);
+        setShowHistoryPanel(false);
+    } else {
+        alert("CRITICAL: Failed to reverse inventory. Modification aborted.");
     }
   };
 
-  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+  const handleHistoryPrint = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    if (!selectedHistoryOrder) return;
+    // Set the hidden print buffer order immediately
+    setCompletedOrder(selectedHistoryOrder);
+
+    // Run the print sequence relying on the established delays
     if (type === 'ALL') {
         const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
         for (const copy of sequence) {
@@ -577,9 +570,8 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
         setPrintCopyType('ALL');
     } else {
         setPrintCopyType(type);
-        setTimeout(() => {
-           window.print();
-        }, 150);
+        await new Promise(resolve => setTimeout(resolve, 150));
+        window.print();
     }
   };
 
@@ -632,26 +624,42 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
     );
   };
 
-  const handleVoidOrder = async () => {
+  const handlePrintRequest = async (type: 'CUSTOMER' | 'GATE' | 'STORE' | 'ALL') => {
+    if (type === 'ALL') {
+        const sequence: ('CUSTOMER' | 'GATE' | 'STORE')[] = ['CUSTOMER', 'GATE', 'STORE'];
+        for (const copy of sequence) {
+            setPrintCopyType(copy);
+            await new Promise(resolve => setTimeout(resolve, 100));
+            window.print();
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        setPrintCopyType('ALL');
+    } else {
+        setPrintCopyType(type);
+        setTimeout(() => {
+           window.print();
+        }, 150);
+    }
+  };
+
+  const handleVoidOrder = async (eOrOrder?: any) => {
     if (!isAdmin) return alert("UNAUTHORIZED: Only Administrators can void transactions.");
     
-    if (!selectedHistoryOrder) return;
-    const orderToVoid = selectedHistoryOrder;
-    
-    if (orderToVoid.status === OrderStatus.CANCELLED) {
-        alert("SYSTEM ERROR: Order is already cancelled.");
-        return;
+    let orderToVoid: Order | null = selectedHistoryOrder;
+    if (eOrOrder && typeof eOrOrder === 'object' && !('nativeEvent' in eOrOrder)) {
+       orderToVoid = eOrOrder as Order;
     }
     
-    if (window.confirm(`VOID PROTOCOL: Permanently cancel this record and reverse inventory?`)) {
+    if (!orderToVoid || orderToVoid.status === OrderStatus.CANCELLED) return;
+    
+    if (window.confirm("VOID PROTOCOL: Permanently cancel this record and reverse inventory?")) {
         try {
-            const itemsToVoid = orderToVoid.items ? orderToVoid.items.map(item => ({ ...item })) : [];
-            const nextStocks = performInventoryAdjustment(itemsToVoid, orderToVoid.storeId || String(user.selectedStoreId), true);
+            // Perform inventory reversal calculation (isReversal = true)
+            const nextStocks = performInventoryAdjustment(orderToVoid.items, orderToVoid.storeId, true);
             
-            const stocksToSync = nextStocks.filter(nextS => {
-                const prevS = stocks.find(s => s.id === nextS.id);
-                return prevS && prevS.quantity !== nextS.quantity;
-            });
+            // Detect all changed stock records to ensure Supabase updates all affected SKUs (Refills AND Empty Cylinders)
+            // All stocks are considered changed when voiding an order to ensure full inventory sync.
+            const stocksToSync = nextStocks;
             
             const cancelledOrder: Order = { 
                 ...orderToVoid, 
@@ -672,6 +680,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                 arToSync.push({ ...existingAR, status: 'paid', outstandingAmount: 0, remarks: 'ORDER_VOIDED' });
             }
 
+            // Sync updated order status, adjusted stocks, and closed AR
             const syncSuccess = await onSync([cancelledOrder], stocksToSync, undefined, arToSync);
             if (!syncSuccess) {
                 alert("VOID COMPLETED LOCALLY: Sync failed.");
@@ -747,9 +756,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
             margin: 0 !important; 
             background: white !important; 
             color: black !important; 
-            opacity: 1 !important;
-            pointer-events: auto !important;
-            z-index: 99999 !important;
+            z-index: 9999 !important;
           }
           .receipt-copy { 
              display: block !important;
@@ -764,11 +771,10 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
       `}</style>
 
       {/* ROOT-LEVEL PRINTABLE AREA FOR CONTINUOUS ROLL */}
-      {/* Changed from display: none (hidden) to opacity-0 to ensure layout parses for Safari printing */}
-      <div id="pos-receipt-print-root" className="fixed top-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none z-[-1]">
+      <div id="pos-receipt-print-root" className="hidden">
         {completedOrder && (
           <div className="w-[80mm] bg-white">
-             <div className="receipt-copy">{generateReceiptPart(completedOrder, printCopyType === 'ALL' ? 'CUSTOMER COPY' : `${printCopyType} COPY`)}</div>
+            <div className="receipt-copy">{generateReceiptPart(completedOrder, `${printCopyType} COPY`)}</div>
           </div>
         )}
       </div>
@@ -840,7 +846,7 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
            <div className="bg-white w-full max-w-[440px] rounded-[48px] p-10 shadow-2xl animate-in zoom-in duration-300 relative flex flex-col max-h-[90vh]">
               <div className="flex justify-between items-center mb-6">
                  <h3 className="text-xl font-black uppercase italic tracking-tighter text-slate-900">Receipt Preview</h3>
-                 <button onClick={() => setIsReceiptPreviewOpen(false)} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors"><i className="fas fa-times"></i></button>
+                 <button onClick={() => { setIsReceiptPreviewOpen(false); setCompletedOrder(null); }} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors"><i className="fas fa-times"></i></button>
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar mb-6 bg-white border border-slate-200 shadow-inner rounded-xl p-6">
                  <div className="receipt-container font-mono text-black text-center text-[10px] w-full pt-2">
@@ -855,164 +861,8 @@ const POS: React.FC<POSProps> = ({ user, stores, onSwitchStore, customers, setCu
                     <button onClick={() => handlePrintRequest('ALL')} className={`py-3 rounded-xl font-black uppercase text-[8px] transition-all border-2 ${printCopyType === 'ALL' ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-900 border-slate-200'}`}>ALL</button>
                  </div>
                  <button onClick={() => handlePrintRequest(printCopyType)} className="w-full py-4 bg-sky-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><i className="fas fa-print"></i> Authorize Print</button>
-                 <button onClick={() => setIsReceiptPreviewOpen(false)} className="w-full py-4 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all">Dismiss View</button>
+                 <button onClick={() => { setIsReceiptPreviewOpen(false); setCompletedOrder(null); }} className="w-full py-4 bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] active:scale-95 transition-all">Dismiss View</button>
               </div>
-           </div>
-        </div>
-      )}
-
-      {showHistoryPanel && (
-        <div className="fixed inset-0 z-[4000] flex justify-end bg-slate-950/60 backdrop-blur-sm animate-in fade-in no-print">
-           <div className="bg-white w-full max-w-[1100px] h-full shadow-2xl flex flex-row animate-in slide-in-from-right duration-300 text-gray-900 rounded-l-[40px] overflow-hidden">
-               
-               {/* LEFT PANE - List & Filters */}
-               <div className="w-[45%] flex flex-col border-r border-slate-100 bg-white shrink-0">
-                   <div className="p-8 pb-6">
-                       <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-6">History Registry</h2>
-                       <div className="flex gap-2 mb-6">
-                           <button onClick={() => setHistoryTab('store')} className={`flex-1 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'store' ? 'bg-[#0ea5e9] text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Store</button>
-                           <button onClick={() => setHistoryTab('pickup')} className={`flex-1 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'pickup' ? 'bg-[#0ea5e9] text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Pickup</button>
-                           <button onClick={() => setHistoryTab('delivery')} className={`flex-1 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'delivery' ? 'bg-[#0ea5e9] text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Delivery</button>
-                           <button onClick={() => setHistoryTab('customer')} className={`flex-1 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${historyTab === 'customer' ? 'bg-[#0ea5e9] text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Customer</button>
-                       </div>
-                       <div className="flex flex-col gap-4">
-                           <div className="relative border border-slate-200 rounded-xl overflow-hidden shadow-sm focus-within:border-sky-500 transition-colors">
-                               <input type="date" value={historyDate} onChange={e => setHistoryDate(e.target.value)} className="w-full px-4 py-3 bg-white text-[11px] font-black uppercase outline-none text-slate-800" />
-                           </div>
-                           <div className="relative border border-slate-200 rounded-xl overflow-hidden shadow-sm focus-within:border-sky-500 transition-colors">
-                               <select value={historyStatusFilter} onChange={e => setHistoryStatusFilter(e.target.value)} className="w-full pl-4 pr-10 py-3 bg-white text-[11px] font-black uppercase outline-none text-slate-800 appearance-none">
-                                   <option value="ALL">All Status</option>
-                                   <option value="ORDERED">Ordered</option>
-                                   <option value="RECEIVABLE">Receivable</option>
-                                   <option value="CANCELLED">Cancelled</option>
-                               </select>
-                               <i className="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] pointer-events-none"></i>
-                           </div>
-                       </div>
-                   </div>
-                   <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-4 custom-scrollbar">
-                       {filteredHistory.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full opacity-30 text-slate-400">
-                               <i className="fas fa-folder-open text-5xl mb-4"></i>
-                               <p className="text-[10px] font-black uppercase tracking-widest italic">No Records Found</p>
-                            </div>
-                       ) : (
-                            filteredHistory.map(order => {
-                                const isSelected = selectedHistoryOrder?.id === order.id;
-                                return (
-                                <button 
-                                  key={order.id} 
-                                  onClick={() => { 
-                                    setSelectedHistoryOrder(order); 
-                                    // PRE-LOAD the print buffer immediately to guarantee DOM readiness for prints
-                                    setCompletedOrder(order); 
-                                  }} 
-                                  className={`w-full text-left p-6 rounded-[24px] border-2 transition-all flex flex-col gap-4 ${isSelected ? 'bg-[#f0fdf4] border-[#86efac] shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300 shadow-sm'}`}
-                                >
-                                    <div className="flex justify-between items-start w-full">
-                                        <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">ID: {order.id.replace(/\D/g, '').slice(-8)}</span>
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{toPHDateString(order.createdAt)}</span>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-[13px] font-black uppercase italic text-slate-900 leading-tight">{order.customerName}</h4>
-                                    </div>
-                                    <div className="flex justify-between items-end w-full">
-                                        <span className="text-[15px] font-black text-slate-900">₱{formatCurrency(order.totalAmount)}</span>
-                                        <div className="flex gap-4 items-center">
-                                            <span className="text-[8px] font-black text-[#0ea5e9] uppercase tracking-widest">By: {order.createdBy}</span>
-                                            <span className={`text-[9px] font-black uppercase tracking-widest ${order.status === 'CANCELLED' ? 'text-red-500' : order.status === 'RECEIVABLE' ? 'text-orange-500' : 'text-[#10b981]'}`}>{order.status}</span>
-                                        </div>
-                                    </div>
-                                </button>
-                                );
-                            })
-                       )}
-                   </div>
-               </div>
-
-               {/* RIGHT PANE - Details */}
-               <div className="flex-1 flex flex-col bg-white border-l border-slate-100 relative p-8">
-                   <button onClick={() => setShowHistoryPanel(false)} className="absolute top-6 right-6 w-10 h-10 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors">
-                       <i className="fas fa-times"></i>
-                   </button>
-                   
-                   {selectedHistoryOrder ? (
-                       <div className="flex-1 flex flex-col h-full max-h-full">
-                           <div className="flex items-center gap-4 mb-8 shrink-0">
-                               <h2 className="text-3xl font-black italic uppercase tracking-tighter">Order Detail</h2>
-                               <button onClick={() => setIsReceiptPreviewOpen(true)} className="px-5 py-2.5 bg-sky-50 text-sky-600 hover:bg-sky-100 rounded-full text-[9px] font-black uppercase tracking-widest transition-colors shadow-sm">View Receipt</button>
-                           </div>
-
-                           <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 mb-6">
-                               <div className="bg-slate-50/50 rounded-[32px] p-8 border border-slate-100 shadow-sm mb-6">
-                                   <div className="grid grid-cols-2 gap-8 mb-8">
-                                       <div>
-                                           <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Customer Profile</p>
-                                           <p className="text-[13px] font-black italic uppercase text-slate-900">{selectedHistoryOrder.customerName}</p>
-                                       </div>
-                                       <div className="text-right">
-                                           <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Operator (User ID)</p>
-                                           <p className="text-[13px] font-black italic uppercase text-slate-900">{selectedHistoryOrder.createdBy}</p>
-                                       </div>
-                                   </div>
-                                   <div className="mb-8">
-                                       <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Address</p>
-                                       <p className="text-[11px] font-black italic uppercase text-slate-700">{selectedHistoryOrder.address || 'N/A'}</p>
-                                   </div>
-                                   <div>
-                                       <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Settlement Method</p>
-                                       <p className="text-[11px] font-black italic uppercase text-[#10b981]">{selectedHistoryOrder.paymentMethod}</p>
-                                   </div>
-                               </div>
-
-                               <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-sm mb-6">
-                                   <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
-                                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Asset Detail</p>
-                                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Value</p>
-                                   </div>
-                                   <div className="space-y-4">
-                                       {selectedHistoryOrder.items.map((item, idx) => (
-                                           <div key={idx} className="flex justify-between items-center">
-                                               <p className="text-[11px] font-black italic uppercase text-slate-900">{item.productName} (x{item.qty})</p>
-                                               <p className="text-[11px] font-black text-slate-900">₱{formatCurrency(item.total)}</p>
-                                           </div>
-                                       ))}
-                                   </div>
-                               </div>
-
-                               <div className="bg-[#0f172a] rounded-[32px] p-8 text-white flex justify-between items-center shadow-2xl">
-                                   <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Settlement Total</p>
-                                   <p className="text-3xl font-black italic tracking-tighter">₱{formatCurrency(selectedHistoryOrder.totalAmount)}</p>
-                               </div>
-                           </div>
-
-                           <div className="grid grid-cols-3 gap-4 shrink-0 mt-auto pt-6 border-t border-slate-100">
-                               <button onClick={handleModifyOrder} disabled={selectedHistoryOrder.status === 'CANCELLED'} className="w-full bg-[#3b82f6] hover:bg-[#2563eb] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest py-6 shadow-lg active:scale-95 transition-all disabled:opacity-50">
-                                   Modify Order
-                               </button>
-                               <div className="flex flex-col gap-2">
-                                   <div className="flex gap-2 h-1/2">
-                                       <button onClick={() => handlePrintRequest('CUSTOMER')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Cust</button>
-                                       <button onClick={() => handlePrintRequest('GATE')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Gate</button>
-                                       <button onClick={() => handlePrintRequest('STORE')} className="flex-1 border-2 border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-[8px] font-black uppercase transition-colors">Stor</button>
-                                       <button onClick={() => handlePrintRequest('ALL')} className="flex-1 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-[8px] font-black uppercase transition-colors">All</button>
-                                   </div>
-                                   <button onClick={() => handlePrintRequest('ALL')} className="h-1/2 bg-[#0f172a] hover:bg-[#1e293b] text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg active:scale-95">
-                                       <i className="fas fa-print"></i> Quick All
-                                   </button>
-                               </div>
-                               <button onClick={handleVoidOrder} disabled={selectedHistoryOrder.status === 'CANCELLED' || !isAdmin} className="w-full bg-white hover:bg-red-50 border-2 border-red-100 text-red-500 rounded-2xl text-[10px] font-black uppercase tracking-widest py-6 shadow-sm active:scale-95 transition-all disabled:opacity-50">
-                                   Void Order
-                               </button>
-                           </div>
-                       </div>
-                   ) : (
-                       <div className="flex-1 flex flex-col items-center justify-center opacity-30 text-slate-400">
-                           <i className="fas fa-receipt text-6xl mb-6"></i>
-                           <p className="text-[12px] font-black uppercase tracking-widest italic">Select a registry entry</p>
-                       </div>
-                   )}
-               </div>
            </div>
         </div>
       )}

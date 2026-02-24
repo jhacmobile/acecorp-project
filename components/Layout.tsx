@@ -81,8 +81,8 @@ const Layout: React.FC<LayoutProps> = ({ user, users, messages, stores, activeTa
     const rights = (user.accessRights || {}) as Partial<AccessRights>;
     
     return [
-      { id: 'dashboard', label: 'Dashboard', icon: 'fa-home', access: rights.dashboard || isAdmin },
       { id: 'pos', label: 'Terminal', icon: 'fa-shopping-cart', access: rights.pos },
+      { id: 'dashboard', label: 'Dashboard', icon: 'fa-home', access: rights.dashboard || isAdmin },
       { id: 'sales', label: 'Audit', icon: 'fa-chart-line', access: rights.sales },
       { id: 'bandi', label: 'Bandi Page', icon: 'fa-clock', access: rights.bandiPage },
       { 
