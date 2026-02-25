@@ -394,10 +394,10 @@ const App = () => {
     immediateReceivablePayments?: ReceivablePayment[],
     immediateAttendance?: AttendanceRecord[],
     immediatePayrollHistory?: PayrollHistoryRecord[],
-    immediatePayrollDraft?: PayrollDraft,
+    immediatePayrollDraft?: PayrollDraft | null,
     immediateSettings?: AppSettings
   ) => {
-    const isManualCall = !!(immediateOrders || immediateStocks || immediateUsers || immediateProducts || immediateBrands || immediateCategories || immediateTransfers || immediateStores || immediateEmployees || immediateCustomers || immediateReceivables || immediateReceivablePayments || immediateAttendance || immediatePayrollHistory || immediatePayrollDraft || immediateSettings);
+    const isManualCall = !!(immediateOrders || immediateStocks || immediateUsers || immediateProducts || immediateBrands || immediateCategories || immediateTransfers || immediateStores || immediateEmployees || immediateCustomers || immediateReceivables || immediateReceivablePayments || immediateAttendance || immediatePayrollHistory || immediatePayrollDraft !== undefined || immediateSettings);
     
     if (!supabase || !hasValidConfig || (isSyncingRef.current && !isManualCall)) return false;
     
@@ -412,14 +412,21 @@ const App = () => {
       }
       if (immediateAttendance && immediateAttendance.length > 0) {
           const mappedAt = immediateAttendance.map(a => ({ id: String(a.id), employee_id: String(a.employeeId), date: a.date, time_in: a.timeIn, time_out: a.timeOut, late_minutes: Number(a.lateMinutes), undertime_minutes: Number(a.undertimeMinutes), overtime_minutes: Number(a.overtimeMinutes), is_half_day: !!a.isHalfDay, status: a.status }));
+          setAttendance(immediateAttendance);
           await supabase.from('attendance').upsert(cleanData(ensureUnique(mappedAt)), { onConflict: 'id' });
       }
       if (immediatePayrollHistory && immediatePayrollHistory.length > 0) {
           const mappedPH = immediatePayrollHistory.map(ph => ({ id: ph.id, period_start: ph.periodStart, period_end: ph.periodEnd, generated_at: ph.generatedAt, generated_by: ph.generatedBy, total_disbursement: ph.totalDisbursement, payroll_data: ph.payrollData }));
+          setPayrollHistory(immediatePayrollHistory);
           await supabase.from('payroll_history').upsert(cleanData(ensureUnique(mappedPH)), { onConflict: 'id' });
       }
-      if (immediatePayrollDraft) {
-          const mappedPD = { id: immediatePayrollDraft.id, store_id: immediatePayrollDraft.storeId, period_start: immediatePayrollDraft.periodStart, period_end: immediatePayrollDraft.periodEnd, adjustments: immediatePayrollDraft.adjustments, updated_at: new Date().toISOString() };
+      if (immediatePayrollDraft && 'delete' in immediatePayrollDraft) {
+          setPayrollDrafts(prev => prev.filter(d => d.id !== immediatePayrollDraft.id));
+          await supabase.from('payroll_drafts').delete().eq('id', immediatePayrollDraft.id);
+      } else if (immediatePayrollDraft) {
+          const draft = immediatePayrollDraft as PayrollDraft;
+          setPayrollDrafts(prev => [draft, ...prev.filter(d => d.id !== draft.id)]);
+          const mappedPD = { id: draft.id, store_id: draft.storeId, period_start: draft.periodStart, period_end: draft.periodEnd, adjustments: draft.adjustments, updated_at: new Date().toISOString() };
           await supabase.from('payroll_drafts').upsert(cleanData(mappedPD), { onConflict: 'id' });
       }
       if (immediateStores && immediateStores.length > 0) {
@@ -611,8 +618,8 @@ const App = () => {
       case 'hr-personnel':
       case 'hr-attendance':
       case 'hr-payroll':
-      case 'hr-history': return <HRManagement key={activeTab} activeTab={activeTab} user={currentUser} employees={employees} setEmployees={setEmployees} attendance={attendance} setAttendance={setAttendance} payrollHistory={payrollHistory} setPayrollHistory={setPayrollHistory} payrollDrafts={payrollDrafts} setPayrollDrafts={setPayrollDrafts} stores={stores} onSync={(immediateEmps, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft) => handleManualSync(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, immediateEmps, undefined, undefined, undefined, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft)} />;
-      case 'hr': return <HRManagement key="hr" activeTab="hr-personnel" user={currentUser} employees={employees} setEmployees={setEmployees} attendance={attendance} setAttendance={setAttendance} payrollHistory={payrollHistory} setPayrollHistory={setPayrollHistory} payrollDrafts={payrollDrafts} setPayrollDrafts={setPayrollDrafts} stores={stores} onSync={(immediateEmps, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft) => handleManualSync(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, immediateEmps, undefined, undefined, undefined, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft)} />;
+      case 'hr-history': return <HRManagement key={activeTab} activeTab={activeTab} user={currentUser} employees={employees} setEmployees={setEmployees} attendance={attendance} setAttendance={setAttendance} payrollHistory={payrollHistory} setPayrollHistory={setPayrollHistory} payrollDrafts={payrollDrafts} setPayrollDrafts={setPayrollDrafts} stores={stores} setActiveTab={setActiveTab} onSync={(immediateEmps, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft) => handleManualSync(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, immediateEmps, undefined, undefined, undefined, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft)} />;
+      case 'hr': return <HRManagement key="hr" activeTab="hr-personnel" user={currentUser} employees={employees} setEmployees={setEmployees} attendance={attendance} setAttendance={setAttendance} payrollHistory={payrollHistory} setPayrollHistory={setPayrollHistory} payrollDrafts={payrollDrafts} setPayrollDrafts={setPayrollDrafts} stores={stores} setActiveTab={setActiveTab} onSync={(immediateEmps, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft) => handleManualSync(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, immediateEmps, undefined, undefined, undefined, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft)} />;
       case 'admin': return <Admin key="admin" users={users} setUsers={setUsers} stores={stores} setStores={setStores} settings={settings} setSettings={setSettings} onSync={(o, s, u, p, b, c, t, st, se) => handleManualSync(o, s, u, p, b, c, t, st, undefined, undefined, undefined, undefined, undefined, undefined, undefined, se)} products={products} stocks={stocks} />;
       case 'bandi': return <BandiPage user={currentUser} employees={employees} attendance={attendance} setAttendance={setAttendance} onSync={(at) => handleManualSync(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, at)} />;
       default: return null;

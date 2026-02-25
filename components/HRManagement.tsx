@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { Employee, EmployeeType, AttendanceRecord, User, Store, UserRole, PayrollHistoryRecord, AttendanceStatus, LoanFrequency, PayrollDraft } from '../types';
 import CustomDatePicker from './CustomDatePicker';
@@ -15,10 +15,11 @@ interface HRProps {
   payrollDrafts: PayrollDraft[];
   setPayrollDrafts: React.Dispatch<React.SetStateAction<PayrollDraft[]>>;
   stores: Store[];
-  onSync: (immediateEmployees?: Employee[], immediateAttendance?: AttendanceRecord[], immediatePayrollHistory?: PayrollHistoryRecord[], immediatePayrollDraft?: PayrollDraft) => Promise<boolean>;
+  setActiveTab: (tab: string) => void;
+  onSync: (immediateEmployees?: Employee[], immediateAttendance?: AttendanceRecord[], immediatePayrollHistory?: PayrollHistoryRecord[], immediatePayrollDraft?: PayrollDraft | { id: string; delete: true }) => Promise<boolean>;
 }
 
-const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmployees, attendance, setAttendance, payrollHistory, setPayrollHistory, payrollDrafts, setPayrollDrafts, stores, onSync }) => {
+const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmployees, attendance, setAttendance, payrollHistory, setPayrollHistory, payrollDrafts, setPayrollDrafts, stores, setActiveTab, onSync }) => {
   const view = activeTab.split('-')[1] || 'personnel';
   const isAdmin = user.role === UserRole.ADMIN;
 
@@ -100,6 +101,23 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [printPayslipTarget, setPrintPayslipTarget] = useState<{ empId: string; data: any } | null>(null);
 
+  const weekDates = useMemo(() => {
+    const dates = [];
+    const [sy, sm, sd] = payrollStart.split('-').map(Number);
+    const [ey, em, ed] = payrollEnd.split('-').map(Number);
+    // Use UTC to avoid local timezone shifts when iterating
+    const curr = new Date(Date.UTC(sy, sm - 1, sd, 0, 0, 0));
+    const end = new Date(Date.UTC(ey, em - 1, ed, 0, 0, 0));
+    
+    let count = 0;
+    while (curr <= end && count < 31) {
+      dates.push(getPHDateISO(curr));
+      curr.setUTCDate(curr.getUTCDate() + 1);
+      count++;
+    }
+    return dates;
+  }, [payrollStart, payrollEnd]);
+
   useEffect(() => {
     if (view === 'payroll') {
       const draft = payrollDrafts.find(d => 
@@ -140,7 +158,7 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     return h * 60 + m;
   };
 
-  const calculateRow = (emp: Employee) => {
+  const calculateRow = useCallback((emp: Employee) => {
     const adj = payrollManualAdjustments[emp.id] || { loanPayment: null, sssPayment: null, overtime: {}, incentive: '0' };
     const weekRecords = attendance.filter(a => String(a.employeeId) === String(emp.id) && weekDates.includes(a.date));
     const schedMins = timeToMinutes(emp.shiftEnd) - timeToMinutes(emp.shiftStart);
@@ -148,8 +166,6 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     const denom = Math.max(0, totalSchedHours - 1);
     const hourly = denom > 0 ? Number((emp.salary / denom).toFixed(2)) : 0;
     
-    const halfThreshold = (schedMins / 2) + (schedMins < 720 ? 30 : 0);
-
     let presentDays = 0;
     let totalLate = 0;
     let totalUT = 0;
@@ -158,13 +174,22 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
       const rec = weekRecords.find(r => r.date === date);
       const status = rec?.status || (rec ? 'REGULAR' : 'ABSENT');
       if (status !== 'ABSENT' && rec) {
-        if (rec.isHalfDay) presentDays += 0.5;
-        else {
-          presentDays += 1;
-          if (status === 'REGULAR') {
+        // Requirement: Must have both in and out to count as paid day for REGULAR status
+        const hasBothPunches = !!(rec.timeIn && rec.timeOut && rec.timeOut !== '--:--');
+        
+        if (status === 'REGULAR') {
+          if (hasBothPunches) {
+            // If both punches exist, it's a full paid day (1.0)
+            // This addresses the "Boy Rider" 6-day requirement in the screenshot
+            presentDays += 1;
             totalLate += rec.lateMinutes || 0;
             totalUT += rec.undertimeMinutes || 0;
           }
+          // If missing punches, it's not counted as a paid day (0.0)
+          // This addresses the "Boy Rider 2" requirement in the screenshot
+        } else {
+          // For non-REGULAR paid statuses (OB, PTO), we count them as full days
+          presentDays += 1;
         }
       }
     });
@@ -176,12 +201,22 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     Object.values(adj.overtime).forEach(h => { otHours += parseFloat(h as string) || 0; });
     const otPay = Number((otHours * hourly).toFixed(2));
     const incentive = parseFloat(adj.incentive) || 0;
-    const vale = Number(emp.valeBalance) || 0;
-    const loan = adj.loanPayment !== null ? (parseFloat(adj.loanPayment) || 0) : Math.min(Number(emp.loanWeeklyDeduction), Number(emp.loanBalance));
-    const sss = adj.sssPayment !== null ? (parseFloat(adj.sssPayment) || 0) : Math.min(Number(emp.sssLoanWeeklyDeduction), Number(emp.sssLoanBalance));
+    
+    const earnedPot = basePay + otPay + incentive;
+    const vale = Math.min(earnedPot, Number(emp.valeBalance) || 0);
+    
+    // Remaining potential after vale, late, UT
+    let remainingPot = Math.max(0, earnedPot - vale - lateDed - utDed);
+    
+    let loan = adj.loanPayment !== null ? (parseFloat(adj.loanPayment) || 0) : Math.min(Number(emp.loanWeeklyDeduction), Number(emp.loanBalance));
+    loan = Math.min(loan, remainingPot);
+    remainingPot = Math.max(0, remainingPot - loan);
+    
+    let sss = adj.sssPayment !== null ? (parseFloat(adj.sssPayment) || 0) : Math.min(Number(emp.sssLoanWeeklyDeduction), Number(emp.sssLoanBalance));
+    sss = Math.min(sss, remainingPot);
 
     const totalDed = vale + loan + sss + lateDed + utDed;
-    const net = Number((basePay + otPay + incentive - totalDed).toFixed(2));
+    const net = Number((earnedPot - totalDed).toFixed(2));
 
     return { 
       days: presentDays, basePay, otPay, incentivePay: incentive, 
@@ -189,7 +224,7 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
       weekRecords, manuals: adj, hourlyRate: hourly, lateDeduction: lateDed, utDeduction: utDed,
       totalLateMinutes: totalLate, totalUTMinutes: totalUT, otTotalHours: otHours
     };
-  };
+  }, [attendance, weekDates, payrollManualAdjustments, employees]);
 
   const handlePayrollUpdate = (empId: string, field: 'loanPayment' | 'sssPayment' | 'overtime' | 'incentive', value: string, date?: string) => {
     const emp = employees.find(e => e.id === empId);
@@ -256,17 +291,33 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
       };
     });
 
+    const existingRecord = payrollHistory.find(h => h.periodStart === payrollStart && h.periodEnd === payrollEnd);
+    if (existingRecord) {
+      if (!confirm(`A payroll record for ${payrollStart} to ${payrollEnd} already exists. Do you want to replace it with this new version?`)) return;
+    }
+
     const newRecord: PayrollHistoryRecord = {
-      id: `PH-${Date.now()}`, periodStart: payrollStart, periodEnd: payrollEnd,
-      generatedAt: new Date().toISOString(), generatedBy: user.username,
-      totalDisbursement: Number(payrollTotals.net.toFixed(2)), payrollData
+      id: existingRecord ? existingRecord.id : `PH-${Date.now()}`, 
+      periodStart: payrollStart, 
+      periodEnd: payrollEnd,
+      generatedAt: new Date().toISOString(), 
+      generatedBy: user.username,
+      totalDisbursement: Number(payrollTotals.net.toFixed(2)), 
+      payrollData
     };
 
-    const nextHistory = [newRecord, ...payrollHistory];
+    const nextHistory = existingRecord 
+      ? payrollHistory.map(h => h.id === existingRecord.id ? newRecord : h)
+      : [newRecord, ...payrollHistory];
+      
+    const draftId = `DRF-${user.selectedStoreId}-${payrollStart}-${payrollEnd}`;
+    
     setEmployees(nextEmployees);
     setPayrollHistory(nextHistory);
     setPayrollManualAdjustments({});
-    await onSync(nextEmployees, undefined, nextHistory);
+    setPayrollDrafts(prev => prev.filter(d => d.id !== draftId));
+    
+    await onSync(nextEmployees, undefined, nextHistory, { id: draftId, delete: true });
     setSelectedHistoryId(newRecord.id);
     alert("Payroll finalized.");
   };
@@ -346,28 +397,30 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     [payrollHistory, selectedHistoryId]
   );
 
-  const weekDates = useMemo(() => {
-    const dates = [];
-    const [sy, sm, sd] = payrollStart.split('-').map(Number);
-    const [ey, em, ed] = payrollEnd.split('-').map(Number);
-    // Use UTC to avoid local timezone shifts when iterating
-    const curr = new Date(Date.UTC(sy, sm - 1, sd, 0, 0, 0));
-    const end = new Date(Date.UTC(ey, em - 1, ed, 0, 0, 0));
-    
-    let count = 0;
-    while (curr <= end && count < 31) {
-      dates.push(getPHDateISO(curr));
-      curr.setUTCDate(curr.getUTCDate() + 1);
-      count++;
-    }
-    return dates;
-  }, [payrollStart, payrollEnd]);
-
   const updateDayStatus = async (empId: string, date: string, status: AttendanceStatus) => {
     const existing = attendance.find(a => String(a.employeeId) === String(empId) && a.date === date);
     let next: AttendanceRecord[] = [];
-    if (existing) next = attendance.map(a => a.id === existing.id ? { ...a, status } : a);
-    else next = [...attendance, { id: `ATT-${Date.now()}`, employeeId: empId, storeId: user.selectedStoreId, date, timeIn: '', timeOut: '', lateMinutes: 0, undertimeMinutes: 0, overtimeMinutes: 0, isHalfDay: false, status }];
+    
+    // Manual status change from the payroll table dropdown resets half-day status to ensure full day credit
+    // unless the user specifically goes to the attendance tab to override it again.
+    if (existing) {
+      next = attendance.map(a => a.id === existing.id ? { ...a, status, isHalfDay: false } : a);
+    } else {
+      next = [...attendance, { 
+        id: `ATT-${Date.now()}`, 
+        employeeId: empId, 
+        storeId: user.selectedStoreId, 
+        date, 
+        timeIn: '', 
+        timeOut: '', 
+        lateMinutes: 0, 
+        undertimeMinutes: 0, 
+        overtimeMinutes: 0, 
+        isHalfDay: false, 
+        status 
+      }];
+    }
+    
     setAttendance(next);
     await onSync(undefined, next);
   };
@@ -375,6 +428,64 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
   const triggerFullReportPrint = () => { 
     setPrintPayslipTarget(null);
     setTimeout(() => window.print(), 100);
+  };
+
+  const calculateLiveStats = (empId: string, periodStart: string, periodEnd: string, storedOt: number, storedIncentive: number, storedLoan: number, storedSss: number, storedVale: number) => {
+    const emp = employees.find(e => e.id === empId);
+    if (!emp) return null;
+
+    const recordDates = [];
+    const [sy, sm, sd] = periodStart.split('-').map(Number);
+    const [ey, em, ed] = periodEnd.split('-').map(Number);
+    const curr = new Date(Date.UTC(sy, sm - 1, sd, 0, 0, 0));
+    const end = new Date(Date.UTC(ey, em - 1, ed, 0, 0, 0));
+    while (curr <= end) {
+      recordDates.push(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(curr));
+      curr.setUTCDate(curr.getUTCDate() + 1);
+    }
+
+    const weekRecords = attendance.filter(a => String(a.employeeId) === String(empId) && recordDates.includes(a.date));
+    const schedMins = timeToMinutes(emp.shiftEnd) - timeToMinutes(emp.shiftStart);
+    const totalSchedHours = schedMins / 60;
+    const denom = Math.max(0, totalSchedHours - 1);
+    const hourly = denom > 0 ? Number((emp.salary / denom).toFixed(2)) : 0;
+
+    let liveDays = 0;
+    let liveLateMins = 0;
+    let liveUTMins = 0;
+
+    recordDates.forEach(date => {
+      const rec = weekRecords.find(r => r.date === date);
+      const status = rec?.status || (rec ? 'REGULAR' : 'ABSENT');
+      if (status !== 'ABSENT' && rec) {
+        const hasBothPunches = !!(rec.timeIn && rec.timeOut && rec.timeOut !== '--:--');
+        if (status === 'REGULAR') {
+          if (hasBothPunches) {
+            liveDays += 1;
+            liveLateMins += rec.lateMinutes || 0;
+            liveUTMins += rec.undertimeMinutes || 0;
+          }
+        } else {
+          liveDays += 1;
+        }
+      }
+    });
+
+    const liveGross = liveDays * emp.salary;
+    const liveLateDed = Number(((liveLateMins / 60) * hourly).toFixed(2));
+    const liveUTDed = Number(((liveUTMins / 60) * hourly).toFixed(2));
+    
+    const totalDeductions = storedVale + storedLoan + storedSss + liveLateDed + liveUTDed;
+    const netPay = Number((liveGross + storedOt + storedIncentive - totalDeductions).toFixed(2));
+
+    return {
+      days: liveDays,
+      gross: liveGross,
+      late: liveLateDed,
+      undertime: liveUTDed,
+      totalDeductions,
+      net: netPay
+    };
   };
 
   const handleUpdateFinance = async () => {
@@ -880,30 +991,37 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {selectedHistory.payrollData.map((d, idx) => {
-                        const totalDeductions = (d.loan || 0) + (d.sss || 0) + (d.vale || 0) + (d.late || 0) + (d.undertime || 0);
+                        const live = calculateLiveStats(d.employeeId, selectedHistory.periodStart, selectedHistory.periodEnd, d.ot, d.incentive || 0, d.loan, d.sss, d.vale);
+                        const days = live ? live.days : d.days;
+                        const gross = live ? live.gross : d.gross;
+                        const late = live ? live.late : d.late;
+                        const undertime = live ? live.undertime : d.undertime;
+                        const totalDeductions = (d.loan || 0) + (d.sss || 0) + (d.vale || 0) + late + undertime;
+                        const net = live ? live.net : d.net;
+
                         return (
                           <tr key={idx} className="hover:bg-slate-50/50 transition group">
                             <td className="px-10 py-6 font-black uppercase italic text-slate-800 text-[14px]">{d.name}</td>
-                            <td className="px-6 py-6 text-center font-bold text-slate-500">{d.days}</td>
-                            <td className="px-6 py-6 text-right font-bold text-slate-900">₱{d.gross.toLocaleString()}</td>
+                            <td className="px-6 py-6 text-center font-bold text-slate-500">{days}</td>
+                            <td className="px-6 py-6 text-right font-bold text-slate-900">₱{gross.toLocaleString()}</td>
                             <td className="px-6 py-6 text-right font-bold text-emerald-600">₱{d.ot.toLocaleString()}</td>
                             <td className="px-6 py-6 text-right font-bold text-sky-600">₱{(d.incentive || 0).toLocaleString()}</td>
                             <td className="px-6 py-6 text-right">
                               <div className="flex flex-col items-end">
                                 <span className="font-bold text-rose-600">₱{totalDeductions.toLocaleString()}</span>
                                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-tighter">
-                                  L:{d.loan} S:{d.sss} V:{d.vale} T:{d.late + d.undertime}
+                                  L:{d.loan} S:{d.sss} V:{d.vale} T:{late + undertime}
                                 </span>
                               </div>
                             </td>
                             <td className="px-10 py-6 text-right font-black text-slate-900 text-[18px] bg-slate-50/50">
                               <div className="flex flex-col items-end gap-1">
-                                 <span>₱{d.net.toLocaleString()}</span>
+                                 <span>₱{net.toLocaleString()}</span>
                                  <button 
                                    onClick={() => {
                                      setPrintPayslipTarget({ 
                                        empId: d.employeeId, 
-                                       data: { name: d.name, days: d.days, gross: d.gross, ot: d.ot, incentive: d.incentive || 0, loan: d.loan, sss: d.sss, vale: d.vale, late: d.late, undertime: d.undertime, net: d.net } 
+                                       data: { name: d.name, days: days, gross: gross, ot: d.ot, incentive: d.incentive || 0, loan: d.loan, sss: d.sss, vale: d.vale, late: late, undertime: undertime, net: net } 
                                      });
                                      setTimeout(() => window.print(), 100);
                                    }}
@@ -922,9 +1040,39 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
                 <div className="p-10 border-t border-slate-50 bg-slate-900 text-white flex justify-between items-center">
                   <div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">TOTAL DISBURSEMENT</p>
-                    <p className="text-4xl font-black italic tracking-tighter">₱{selectedHistory.totalDisbursement.toLocaleString()}</p>
+                    <p className="text-4xl font-black italic tracking-tighter">
+                      ₱{(() => {
+                        let total = 0;
+                        selectedHistory.payrollData.forEach(d => {
+                          const live = calculateLiveStats(d.employeeId, selectedHistory.periodStart, selectedHistory.periodEnd, d.ot, d.incentive || 0, d.loan, d.sss, d.vale);
+                          total += live ? live.net : d.net;
+                        });
+                        return total.toLocaleString();
+                      })()}
+                    </p>
                   </div>
                   <div className="flex gap-4">
+                    <button 
+                      onClick={() => {
+                        if (!confirm("Load this record into Payroll Processing for modification? You can then adjust attendance or OT and re-finalize.")) return;
+                        setPayrollStart(selectedHistory.periodStart);
+                        setPayrollEnd(selectedHistory.periodEnd);
+                        const nextAdjustments: Record<string, any> = {};
+                        selectedHistory.payrollData.forEach(d => {
+                          nextAdjustments[d.employeeId] = {
+                            loanPayment: d.loan,
+                            sssPayment: d.sss,
+                            overtime: { 'RECONSTRUCTED': d.ot.toString() },
+                            incentive: (d.incentive || 0).toString()
+                          };
+                        });
+                        setPayrollManualAdjustments(nextAdjustments);
+                        setActiveTab('hr-payroll');
+                      }}
+                      className="bg-sky-600 text-white px-8 py-4 rounded-[24px] text-[11px] font-black uppercase tracking-widest shadow-xl hover:scale-105 transition-all"
+                    >
+                      <i className="fas fa-edit mr-2"></i> Modify Period
+                    </button>
                     <button 
                       onClick={() => {
                         setPrintPayslipTarget(null); // Ensure we print the report, not a payslip
