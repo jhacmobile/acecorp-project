@@ -263,10 +263,18 @@ const Inventory: React.FC<InventoryProps> = ({ user, products, setProducts, stoc
         <style>{`
           @media print {
             @page { size: 80mm auto; margin: 0mm; }
+            #root { display: none !important; }
             body { background: white !important; margin: 0 !important; padding: 0 !important; }
-            .no-print { display: none !important; }
+            body * { visibility: hidden !important; }
+            #transfer-manifest-print-root, #transfer-manifest-print-root *,
+            #hub-inventory-snapshot-root, #hub-inventory-snapshot-root * { 
+               visibility: visible !important; 
+            }
             #transfer-manifest-print-root, #hub-inventory-snapshot-root { 
                display: block !important; 
+               position: absolute !important;
+               left: 0 !important;
+               top: 0 !important;
                width: 80mm !important; 
                height: auto !important; 
                min-height: 0 !important; 
@@ -274,9 +282,7 @@ const Inventory: React.FC<InventoryProps> = ({ user, products, setProducts, stoc
                margin: 0 !important; 
                background: white !important; 
                color: black !important; 
-               position: static !important; 
             }
-            #transfer-manifest-print-root *, #hub-inventory-snapshot-root * { visibility: visible !important; }
           }
         `}</style>
 
@@ -608,19 +614,23 @@ const Inventory: React.FC<InventoryProps> = ({ user, products, setProducts, stoc
       <style>{`
         @media print {
           @page { size: 80mm auto; margin: 0mm; }
+          #root { display: none !important; }
+          body { background: white !important; margin: 0 !important; padding: 0 !important; }
           body * { visibility: hidden !important; }
-          #stock-registry-snapshot-root, #stock-registry-snapshot-root * { visibility: visible !important; display: block !important; }
-          #stock-registry-snapshot-root { 
-             position: absolute !important; 
-             left: 0; top: 0; 
-             width: 80mm !important; 
-             background: white; 
-             color: black; 
-             padding: 0;
-             margin: 0;
-             display: block !important;
+          #stock-registry-snapshot-root, #stock-registry-snapshot-root * { 
+             visibility: visible !important; 
           }
-          .no-print { display: none !important; }
+          #stock-registry-snapshot-root { 
+             display: block !important;
+             position: absolute !important; 
+             left: 0 !important; 
+             top: 0 !important; 
+             width: 80mm !important; 
+             background: white !important; 
+             color: black !important; 
+             padding: 0 !important;
+             margin: 0 !important;
+          }
         }
       `}</style>
       
