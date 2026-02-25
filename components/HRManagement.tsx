@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { Employee, EmployeeType, AttendanceRecord, User, Store, UserRole, PayrollHistoryRecord, AttendanceStatus, LoanFrequency, PayrollDraft } from '../types';
 import CustomDatePicker from './CustomDatePicker';
 
@@ -95,6 +96,9 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     overtime: Record<string, string>; 
     incentive: string;
   }>>({});
+
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [printPayslipTarget, setPrintPayslipTarget] = useState<{ empId: string; data: any } | null>(null);
 
   useEffect(() => {
     if (view === 'payroll') {
@@ -263,6 +267,7 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     setPayrollHistory(nextHistory);
     setPayrollManualAdjustments({});
     await onSync(nextEmployees, undefined, nextHistory);
+    setSelectedHistoryId(newRecord.id);
     alert("Payroll finalized.");
   };
 
@@ -336,6 +341,11 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     }), [employees, user.selectedStoreId, user.assignedStoreIds, searchQuery]
   );
 
+  const selectedHistory = useMemo(() => 
+    payrollHistory.find(h => h.id === selectedHistoryId),
+    [payrollHistory, selectedHistoryId]
+  );
+
   const weekDates = useMemo(() => {
     const dates = [];
     const [sy, sm, sd] = payrollStart.split('-').map(Number);
@@ -362,7 +372,10 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     await onSync(undefined, next);
   };
 
-  const triggerFullReportPrint = () => { window.print(); };
+  const triggerFullReportPrint = () => { 
+    setPrintPayslipTarget(null);
+    setTimeout(() => window.print(), 100);
+  };
 
   const handleUpdateFinance = async () => {
     if (!financeEmpId || financeAmount <= 0) return;
@@ -437,11 +450,149 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     <div className="space-y-10 font-sans text-slate-900 h-full overflow-y-auto custom-scrollbar p-6 md:p-12 relative bg-[#f8fafc]">
       <style>{`
         @media print {
+          @page { size: A4 portrait; margin: 10mm; }
+          #root { display: none !important; }
+          body { background: white !important; margin: 0 !important; padding: 0 !important; }
           body * { visibility: hidden !important; }
-          #report-printable-area, #report-printable-area * { visibility: visible !important; display: block !important; }
-          .no-print { display: none !important; }
+          #payroll-report-print-root, #payroll-report-print-root *,
+          #payslip-print-root, #payslip-print-root * { 
+             visibility: visible !important; 
+          }
+          #payroll-report-print-root, #payslip-print-root { 
+             display: block !important; 
+             position: absolute !important;
+             left: 0 !important;
+             top: 0 !important;
+             width: 100% !important; 
+             height: auto !important; 
+             background: white !important; 
+             color: black !important; 
+          }
+          thead { display: table-header-group; }
+          .page-break { page-break-after: always; }
         }
       `}</style>
+
+      {/* PRINT ROOT: A4 PAYROLL REPORT */}
+      {ReactDOM.createPortal(
+        <div id="payroll-report-print-root" className="hidden">
+           <div className="p-8 text-black font-sans">
+              <div className="text-center mb-8 border-b-2 border-black pb-4">
+                 <h1 className="text-2xl font-black uppercase italic tracking-tighter">ACECORP ENTERPRISE</h1>
+                 <p className="text-sm font-bold uppercase tracking-widest">CONSOLIDATED PAYROLL DISBURSEMENT REPORT</p>
+                 <div className="flex justify-center gap-8 mt-2 text-xs font-bold uppercase">
+                    <span>Period: {view === 'history' && selectedHistory ? `${selectedHistory.periodStart} to ${selectedHistory.periodEnd}` : `${payrollStart} to ${payrollEnd}`}</span>
+                    <span>Generated: {new Date().toLocaleString()}</span>
+                 </div>
+              </div>
+
+              <table className="w-full text-[10px] border-collapse border border-black">
+                 <thead>
+                    <tr className="bg-slate-100 uppercase font-black">
+                       <th className="border border-black p-2 text-left">Personnel</th>
+                       <th className="border border-black p-2 text-center">Days</th>
+                       <th className="border border-black p-2 text-right">Gross</th>
+                       <th className="border border-black p-2 text-right">OT</th>
+                       <th className="border border-black p-2 text-right">Incentive</th>
+                       <th className="border border-black p-2 text-right">Loans/SSS</th>
+                       <th className="border border-black p-2 text-right">Vale</th>
+                       <th className="border border-black p-2 text-right">Late/UT</th>
+                       <th className="border border-black p-2 text-right bg-slate-200">Net Pay</th>
+                    </tr>
+                 </thead>
+                 <tbody>
+                    {(view === 'history' && selectedHistory ? selectedHistory.payrollData : filteredEmployees.map(e => {
+                      const c = calculateRow(e);
+                      return { name: e.name, days: c.days, gross: c.basePay, ot: c.otPay, incentive: c.incentivePay, loan: c.loanPay, sss: c.sssPay, vale: c.valePay, late: c.lateDeduction, undertime: c.utDeduction, net: c.net };
+                    })).map((d, i) => (
+                       <tr key={i} className="border border-black">
+                          <td className="border border-black p-2 font-bold uppercase">{d.name}</td>
+                          <td className="border border-black p-2 text-center">{d.days}</td>
+                          <td className="border border-black p-2 text-right">₱{d.gross.toLocaleString()}</td>
+                          <td className="border border-black p-2 text-right">₱{d.ot.toLocaleString()}</td>
+                          <td className="border border-black p-2 text-right">₱{(d.incentive || 0).toLocaleString()}</td>
+                          <td className="border border-black p-2 text-right">₱{(d.loan + d.sss).toLocaleString()}</td>
+                          <td className="border border-black p-2 text-right">₱{d.vale.toLocaleString()}</td>
+                          <td className="border border-black p-2 text-right">₱{(d.late + d.undertime).toLocaleString()}</td>
+                          <td className="border border-black p-2 text-right font-black bg-slate-50">₱{d.net.toLocaleString()}</td>
+                       </tr>
+                    ))}
+                 </tbody>
+                 <tfoot>
+                    <tr className="bg-slate-200 font-black uppercase">
+                       <td className="border border-black p-2 text-right" colSpan={8}>Total Disbursement:</td>
+                       <td className="border border-black p-2 text-right">₱{(view === 'history' && selectedHistory ? selectedHistory.totalDisbursement : payrollTotals.net).toLocaleString()}</td>
+                    </tr>
+                 </tfoot>
+              </table>
+
+              <div className="mt-12 grid grid-cols-3 gap-8 text-center text-xs font-black uppercase">
+                 <div className="border-t border-black pt-2">Prepared By</div>
+                 <div className="border-t border-black pt-2">Verified By</div>
+                 <div className="border-t border-black pt-2">Approved By</div>
+              </div>
+           </div>
+        </div>,
+        document.body
+      )}
+
+      {/* PRINT ROOT: PAYSLIP */}
+      {ReactDOM.createPortal(
+        <div id="payslip-print-root" className="hidden">
+           {printPayslipTarget && (
+             <div className="p-12 text-black font-sans max-w-[140mm] mx-auto border-2 border-black border-dashed">
+                <div className="text-center mb-6">
+                   <h2 className="text-xl font-black uppercase italic">ACECORP ENTERPRISE</h2>
+                   <p className="text-[10px] font-bold uppercase tracking-widest">OFFICIAL PAYSLIP</p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 mb-6 text-[11px] font-bold uppercase">
+                   <div className="space-y-1">
+                      <p><span className="opacity-50">Personnel:</span> {printPayslipTarget.data.name}</p>
+                      <p><span className="opacity-50">Period:</span> {payrollStart} to {payrollEnd}</p>
+                   </div>
+                   <div className="space-y-1 text-right">
+                      <p><span className="opacity-50">Date:</span> {new Date().toLocaleDateString()}</p>
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-8">
+                   <div className="space-y-2">
+                      <p className="text-[10px] font-black border-b border-black pb-1 mb-2 uppercase">Earnings</p>
+                      <div className="flex justify-between text-[11px]"><span>Basic Pay ({printPayslipTarget.data.days} days)</span> <span>₱{printPayslipTarget.data.gross.toLocaleString()}</span></div>
+                      <div className="flex justify-between text-[11px]"><span>Overtime Pay</span> <span>₱{printPayslipTarget.data.ot.toLocaleString()}</span></div>
+                      <div className="flex justify-between text-[11px]"><span>Incentives</span> <span>₱{printPayslipTarget.data.incentive.toLocaleString()}</span></div>
+                      <div className="flex justify-between font-black border-t border-black pt-1 mt-2 text-[11px]"><span>Gross Earnings</span> <span>₱{(printPayslipTarget.data.gross + printPayslipTarget.data.ot + printPayslipTarget.data.incentive).toLocaleString()}</span></div>
+                   </div>
+                   <div className="space-y-2">
+                      <p className="text-[10px] font-black border-b border-black pb-1 mb-2 uppercase">Deductions</p>
+                      <div className="flex justify-between text-[11px]"><span>Loans/SSS Repayment</span> <span>₱{(printPayslipTarget.data.loan + printPayslipTarget.data.sss).toLocaleString()}</span></div>
+                      <div className="flex justify-between text-[11px]"><span>Vale / Cash Advance</span> <span>₱{printPayslipTarget.data.vale.toLocaleString()}</span></div>
+                      <div className="flex justify-between text-[11px]"><span>Late / Undertime</span> <span>₱{(printPayslipTarget.data.late + printPayslipTarget.data.undertime).toLocaleString()}</span></div>
+                      <div className="flex justify-between font-black border-t border-black pt-1 mt-2 text-[11px]"><span>Total Deductions</span> <span>₱{(printPayslipTarget.data.loan + printPayslipTarget.data.sss + printPayslipTarget.data.vale + printPayslipTarget.data.late + printPayslipTarget.data.undertime).toLocaleString()}</span></div>
+                   </div>
+                </div>
+
+                <div className="mt-8 pt-4 border-t-2 border-black flex justify-between items-center">
+                   <span className="text-lg font-black uppercase italic tracking-tighter">NET TAKE HOME:</span>
+                   <span className="text-2xl font-black italic">₱{printPayslipTarget.data.net.toLocaleString()}</span>
+                </div>
+
+                <div className="mt-12 flex justify-between gap-12">
+                   <div className="flex-1 text-center">
+                      <div className="border-b border-black h-8 mb-1"></div>
+                      <p className="text-[8px] font-black uppercase">Employee Signature</p>
+                   </div>
+                   <div className="flex-1 text-center">
+                      <div className="border-b border-black h-8 mb-1"></div>
+                      <p className="text-[8px] font-black uppercase">Authorized By</p>
+                   </div>
+                </div>
+             </div>
+           )}
+        </div>,
+        document.body
+      )}
 
       {view === 'personnel' && (
         <div className="bg-white rounded-[64px] shadow-sm border border-slate-100 overflow-hidden mb-12 animate-in fade-in no-print">
@@ -635,7 +786,23 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
                            <td className="border-l border-slate-100 p-3 bg-rose-100/5"><p className="text-[13px] font-black text-rose-800 italic">₱{calc.lateDeduction.toLocaleString()}</p><div className="text-[8px] text-rose-400 font-black tracking-widest mt-1">LATE</div></td>
                            {/* Improved UT (Undertime) visibility - Label set to rose-500 and value set to rose-950 as requested */}
                            <td className="border-l border-slate-100 p-3 bg-rose-100/10"><p className="text-[13px] font-black text-rose-950 italic">₱{calc.utDeduction.toLocaleString()}</p><div className="text-[8px] text-rose-500 font-black tracking-widest mt-1">UT</div></td>
-                           <td className="border-l border-slate-100 font-black text-slate-900 italic text-[24px] bg-slate-50 tracking-tighter shadow-inner">₱{calc.net.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                           <td className="border-l border-slate-100 font-black text-slate-900 italic text-[24px] bg-slate-50 tracking-tighter shadow-inner">
+                              <div className="flex flex-col items-center gap-2">
+                                 <span>₱{calc.net.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
+                                 <button 
+                                   onClick={() => {
+                                     setPrintPayslipTarget({ 
+                                       empId: e.id, 
+                                       data: { name: e.name, days: calc.days, gross: calc.basePay, ot: calc.otPay, incentive: calc.incentivePay, loan: calc.loanPay, sss: calc.sssPay, vale: calc.valePay, late: calc.lateDeduction, undertime: calc.utDeduction, net: calc.net } 
+                                     });
+                                     setTimeout(() => window.print(), 100);
+                                   }}
+                                   className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all"
+                                 >
+                                   Payslip
+                                 </button>
+                              </div>
+                           </td>
                         </tr>
                      );
                   })}
@@ -646,6 +813,139 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
                   </tr>
                </tfoot>
             </table>
+          </div>
+        </div>
+      )}
+
+      {view === 'history' && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-10 h-[calc(100vh-240px)] animate-in fade-in no-print">
+          {/* Sidebar */}
+          <div className="lg:col-span-1 bg-white rounded-[48px] shadow-sm border border-slate-100 flex flex-col overflow-hidden">
+            <div className="p-10 border-b border-slate-50">
+              <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">ARCHIVE REGISTRY</h3>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Finalized Payroll Vault</p>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
+              {payrollHistory.length === 0 ? (
+                <div className="text-center py-20 opacity-20">
+                  <i className="fas fa-archive text-4xl mb-4"></i>
+                  <p className="text-[10px] font-black uppercase">No records found</p>
+                </div>
+              ) : (
+                payrollHistory.map(h => (
+                  <button
+                    key={h.id}
+                    onClick={() => setSelectedHistoryId(h.id)}
+                    className={`w-full text-left p-6 rounded-[32px] transition-all group ${selectedHistoryId === h.id ? 'bg-slate-900 text-white shadow-xl scale-[1.02]' : 'hover:bg-slate-50 text-slate-600'}`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className={`text-[12px] font-black uppercase italic ${selectedHistoryId === h.id ? 'text-white' : 'text-slate-900'}`}>{h.periodStart} → {h.periodEnd}</p>
+                        <p className={`text-[9px] font-bold uppercase mt-1 ${selectedHistoryId === h.id ? 'text-slate-400' : 'text-slate-400'}`}>DISB: ₱{h.totalDisbursement.toLocaleString()}</p>
+                      </div>
+                      <i className={`fas fa-chevron-right text-[10px] transition-transform ${selectedHistoryId === h.id ? 'translate-x-1' : 'opacity-0 group-hover:opacity-100'}`}></i>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="lg:col-span-3 bg-white rounded-[56px] shadow-sm border border-slate-100 flex flex-col overflow-hidden">
+            {selectedHistory ? (
+              <>
+                <div className="p-10 border-b border-slate-50 bg-[#fcfdfe] flex justify-between items-center">
+                  <div>
+                    <h2 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter">PAYROLL VAULT ENTRY</h2>
+                    <p className="text-[10px] font-black text-sky-600 uppercase tracking-widest mt-2">PERIOD: {selectedHistory.periodStart} TO {selectedHistory.periodEnd}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">GENERATED AT</p>
+                    <p className="text-[12px] font-black text-slate-900 uppercase">{new Date(selectedHistory.generatedAt).toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-auto custom-scrollbar">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="sticky top-0 bg-slate-50 text-[10px] text-slate-400 font-black uppercase tracking-widest border-b border-slate-100 z-10">
+                      <tr>
+                        <th className="px-10 py-6">Personnel</th>
+                        <th className="px-6 py-6 text-center">Days</th>
+                        <th className="px-6 py-6 text-right">Gross</th>
+                        <th className="px-6 py-6 text-right text-emerald-600">OT</th>
+                        <th className="px-6 py-6 text-right text-sky-600">Incentive</th>
+                        <th className="px-6 py-6 text-right text-rose-600">Deductions</th>
+                        <th className="px-10 py-6 text-right bg-slate-900 text-white">Net Pay</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {selectedHistory.payrollData.map((d, idx) => {
+                        const totalDeductions = (d.loan || 0) + (d.sss || 0) + (d.vale || 0) + (d.late || 0) + (d.undertime || 0);
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/50 transition group">
+                            <td className="px-10 py-6 font-black uppercase italic text-slate-800 text-[14px]">{d.name}</td>
+                            <td className="px-6 py-6 text-center font-bold text-slate-500">{d.days}</td>
+                            <td className="px-6 py-6 text-right font-bold text-slate-900">₱{d.gross.toLocaleString()}</td>
+                            <td className="px-6 py-6 text-right font-bold text-emerald-600">₱{d.ot.toLocaleString()}</td>
+                            <td className="px-6 py-6 text-right font-bold text-sky-600">₱{(d.incentive || 0).toLocaleString()}</td>
+                            <td className="px-6 py-6 text-right">
+                              <div className="flex flex-col items-end">
+                                <span className="font-bold text-rose-600">₱{totalDeductions.toLocaleString()}</span>
+                                <span className="text-[8px] text-slate-400 font-black uppercase tracking-tighter">
+                                  L:{d.loan} S:{d.sss} V:{d.vale} T:{d.late + d.undertime}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-10 py-6 text-right font-black text-slate-900 text-[18px] bg-slate-50/50">
+                              <div className="flex flex-col items-end gap-1">
+                                 <span>₱{d.net.toLocaleString()}</span>
+                                 <button 
+                                   onClick={() => {
+                                     setPrintPayslipTarget({ 
+                                       empId: d.employeeId, 
+                                       data: { name: d.name, days: d.days, gross: d.gross, ot: d.ot, incentive: d.incentive || 0, loan: d.loan, sss: d.sss, vale: d.vale, late: d.late, undertime: d.undertime, net: d.net } 
+                                     });
+                                     setTimeout(() => window.print(), 100);
+                                   }}
+                                   className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all"
+                                 >
+                                   Payslip
+                                 </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="p-10 border-t border-slate-50 bg-slate-900 text-white flex justify-between items-center">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">TOTAL DISBURSEMENT</p>
+                    <p className="text-4xl font-black italic tracking-tighter">₱{selectedHistory.totalDisbursement.toLocaleString()}</p>
+                  </div>
+                  <div className="flex gap-4">
+                    <button 
+                      onClick={() => {
+                        setPrintPayslipTarget(null); // Ensure we print the report, not a payslip
+                        setTimeout(() => window.print(), 100);
+                      }} 
+                      className="bg-white text-slate-900 px-10 py-4 rounded-[24px] text-[11px] font-black uppercase tracking-widest shadow-xl hover:scale-105 transition-all"
+                    >
+                      <i className="fas fa-print mr-2"></i> Print Vault Record
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-slate-200 p-20">
+                <div className="w-32 h-32 rounded-[48px] bg-slate-50 flex items-center justify-center mb-8">
+                  <i className="fas fa-shield-alt text-6xl text-slate-100"></i>
+                </div>
+                <h3 className="text-4xl font-black uppercase italic tracking-tighter opacity-20">SELECT VAULT ENTRY</h3>
+                <p className="text-[11px] font-black uppercase tracking-[0.4em] mt-4 opacity-20">Accessing Encrypted Payroll History</p>
+              </div>
+            )}
           </div>
         </div>
       )}
