@@ -312,15 +312,26 @@ const Inventory: React.FC<InventoryProps> = ({ user, products, setProducts, stoc
                   <p className="text-[10px] uppercase font-bold border-y border-black border-dashed py-2 my-4 text-black">STOCK TRANSFER MANIFEST</p>
                   <div className="text-left font-bold space-y-1 uppercase text-[8.5px] text-black">
                      <div className="flex justify-between"><span>Registry ID:</span> <span>{manifestToView.id.slice(-8)}</span></div>
+                     <div className="flex justify-between"><span>Date:</span> <span>{new Date(manifestToView.createdAt).toLocaleDateString()}</span></div>
                      <div className="flex justify-between"><span>To Node:</span> <span>{stores.find(s=>s.id===manifestToView.toStoreId)?.name}</span></div>
-                     <div className="flex justify-between"><span>Auth Op:</span> <span>{manifestToView.initiatedBy}</span></div>
+                     <div className="flex justify-between"><span>Sender (Op):</span> <span>{manifestToView.initiatedBy}</span></div>
+                     {manifestToView.acceptedBy && <div className="flex justify-between"><span>Receiver (Op):</span> <span>{manifestToView.acceptedBy}</span></div>}
                   </div>
                   <div className="border-b border-black border-dashed my-4"></div>
                   {manifestToView.items.length > 0 && (
                     <div className="mb-4">
                        <p className="font-black text-left border-b border-black mb-1 pb-1 text-black text-[9px]">OUTBOUND ASSETS</p>
                        <table className="w-full text-left text-[8.5px]">
-                          <tbody>{manifestToView.items.map((item, i) => (<tr key={i} className="border-b border-dashed border-slate-200"><td className="py-2 font-bold text-black uppercase">{products.find(p=>p.id===item.productId)?.name || item.productId}</td><td className="py-2 text-right font-black text-black">x{item.qty}</td></tr>))}</tbody>
+                          <tbody>{manifestToView.items.map((item, i) => {
+                            const p = products.find(prod => prod.id === item.productId);
+                            const fullName = p ? `${p.brand} ${p.name} ${p.size || ''}`.trim() : item.productId;
+                            return (
+                              <tr key={i} className="border-b border-dashed border-slate-200">
+                                <td className="py-2 font-bold text-black uppercase leading-tight">{fullName}</td>
+                                <td className="py-2 text-right font-black text-black align-top">x{item.qty}</td>
+                              </tr>
+                            );
+                          })}</tbody>
                        </table>
                     </div>
                   )}
@@ -328,7 +339,16 @@ const Inventory: React.FC<InventoryProps> = ({ user, products, setProducts, stoc
                     <div className="mt-4">
                        <p className="font-black text-left border-b border-black mb-1 pb-1 text-black text-[9px]">RETURNED EMPTIES</p>
                        <table className="w-full text-left text-[8.5px]">
-                          <tbody>{manifestToView.returnedItems.map((item, i) => (<tr key={i} className="border-b border-dashed border-slate-200"><td className="py-2 font-bold text-black uppercase">{products.find(p=>p.id===item.productId)?.name || item.productId}</td><td className="py-2 text-right font-black text-black">x{item.qty}</td></tr>))}</tbody>
+                          <tbody>{manifestToView.returnedItems.map((item, i) => {
+                            const p = products.find(prod => prod.id === item.productId);
+                            const fullName = p ? `${p.brand} ${p.name} ${p.size || ''}`.trim() : item.productId;
+                            return (
+                              <tr key={i} className="border-b border-dashed border-slate-200">
+                                <td className="py-2 font-bold text-black uppercase leading-tight">{fullName}</td>
+                                <td className="py-2 text-right font-black text-black align-top">x{item.qty}</td>
+                              </tr>
+                            );
+                          })}</tbody>
                        </table>
                     </div>
                   )}
