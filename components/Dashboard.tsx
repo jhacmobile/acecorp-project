@@ -171,7 +171,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
     const pieData = Object.entries(stats.breakdown).filter(([_, v]) => v > 0).map(([name, value]) => ({ name, value }));
     const storeStocks = stocks.filter(s => String(s.storeId) === String(selectedStoreId)).map(s => {
       const p = products.find(prod => String(prod.id) === String(s.productId));
-      return { name: (p ? p.name : 'SKU').split(',')[0], qty: Number(s.quantity) };
+      const displayName = p ? `${p.brand} ${p.name} ${p.size || ''}`.trim() : 'SKU';
+      return { name: displayName, qty: Number(s.quantity) };
     }).sort((a, b) => b.qty - a.qty).slice(0, 8);
     return { velocityData, pieData, storeStocks };
   }, [stats, reportPeriod, receivables, stocks, selectedStoreId, products]);
@@ -264,6 +265,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
   };
 
   const COLORS = ['#38bdf8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+  const PIE_COLORS: Record<string, string> = {
+    'CASH': '#38bdf8',
+    'GCASH': '#10b981',
+    'MAYA': '#f59e0b',
+    'BANK': '#8b5cf6',
+    'OTHER': '#64748b'
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden font-sans text-slate-900">
@@ -505,14 +513,31 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm flex flex-col h-[400px]">
                <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-8">Settlement Distribution</h3>
-               <div className="flex-1">
+                <div className="flex-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                        <Pie data={charts.pieData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                           {charts.pieData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                        <Pie 
+                          data={charts.pieData} 
+                          innerRadius={65} 
+                          outerRadius={85} 
+                          paddingAngle={8} 
+                          dataKey="value"
+                          stroke="none"
+                        >
+                           {charts.pieData.map((entry, index) => (
+                             <Cell key={`cell-${index}`} fill={PIE_COLORS[entry.name] || COLORS[index % COLORS.length]} />
+                           ))}
                         </Pie>
-                        <Tooltip contentStyle={{borderRadius:'16px', border:'none', fontWeight:'900', fontSize:'11px'}} />
-                        <Legend iconType="circle" verticalAlign="bottom" wrapperStyle={{fontSize:'9px', fontWeight:'bold', textTransform:'uppercase', paddingTop: '20px'}} />
+                        <Tooltip 
+                          contentStyle={{borderRadius:'24px', border:'none', fontWeight:'900', fontSize:'12px', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)'}} 
+                          formatter={(val: number) => [formatCurrency(val), 'Total']}
+                        />
+                        <Legend 
+                          iconType="circle" 
+                          verticalAlign="bottom" 
+                          align="center"
+                          wrapperStyle={{fontSize:'10px', fontWeight:'800', textTransform:'uppercase', paddingTop: '30px', letterSpacing: '0.05em'}} 
+                        />
                     </PieChart>
                   </ResponsiveContainer>
                </div>
@@ -526,12 +551,34 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                <div className="flex-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={charts.velocityData}>
-                        <defs><linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.1}/><stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/></linearGradient></defs>
+                        <defs>
+                          <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8', fontWeight: 800}} interval={2} />
+                        <XAxis 
+                          dataKey="name" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{fontSize: 10, fill: '#94a3b8', fontWeight: 800}} 
+                          interval={reportPeriod === 'daily' ? 3 : 'preserveStartEnd'} 
+                        />
                         <YAxis hide />
-                        <Tooltip contentStyle={{borderRadius:'16px', border:'none', fontWeight:'900'}} formatter={(val: number) => [formatCurrency(val), 'Net Inflow']} />
-                        <Area type="monotone" dataKey="value" stroke="#0ea5e9" strokeWidth={4} fillOpacity={1} fill="url(#colorVal)" />
+                        <Tooltip 
+                          contentStyle={{borderRadius:'24px', border:'none', fontWeight:'900', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)'}} 
+                          formatter={(val: number) => [formatCurrency(val), 'Net Inflow']} 
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey="value" 
+                          stroke="#0ea5e9" 
+                          strokeWidth={4} 
+                          fillOpacity={1} 
+                          fill="url(#colorVal)" 
+                          animationDuration={1500}
+                        />
                     </AreaChart>
                   </ResponsiveContainer>
                </div>
@@ -541,12 +588,28 @@ const Dashboard: React.FC<DashboardProps> = ({ user, orders, products, stocks, s
                <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-8">Physical Assets</h3>
                <div className="flex-1">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={charts.storeStocks} layout="vertical">
+                    <BarChart data={charts.storeStocks} layout="vertical" margin={{ left: 20, right: 30 }}>
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                         <XAxis type="number" hide />
-                        <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 8, fill: '#64748b', fontWeight: 800}} width={75} />
-                        <Tooltip contentStyle={{borderRadius:'12px', border:'none'}} cursor={{fill: '#f8fafc'}} />
-                        <Bar dataKey="qty" fill="#0ea5e9" radius={[0, 10, 10, 0]} barSize={12} />
+                        <YAxis 
+                          type="category" 
+                          dataKey="name" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{fontSize: 9, fill: '#64748b', fontWeight: 800}} 
+                          width={120} 
+                        />
+                        <Tooltip 
+                          contentStyle={{borderRadius:'20px', border:'none', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)'}} 
+                          cursor={{fill: '#f8fafc'}} 
+                        />
+                        <Bar 
+                          dataKey="qty" 
+                          fill="#38bdf8" 
+                          radius={[0, 12, 12, 0]} 
+                          barSize={16} 
+                          animationDuration={1500}
+                        />
                     </BarChart>
                   </ResponsiveContainer>
                </div>
