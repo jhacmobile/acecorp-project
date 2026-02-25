@@ -16,10 +16,17 @@ interface HRProps {
   setPayrollDrafts: React.Dispatch<React.SetStateAction<PayrollDraft[]>>;
   stores: Store[];
   setActiveTab: (tab: string) => void;
+  payrollStart: string;
+  setPayrollStart: React.Dispatch<React.SetStateAction<string>>;
+  payrollEnd: string;
+  setPayrollEnd: React.Dispatch<React.SetStateAction<string>>;
+  payrollManualAdjustments: Record<string, any>;
+  setPayrollManualAdjustments: React.Dispatch<React.SetStateAction<Record<string, any>>>;
+  skipDraftLoadRef: React.MutableRefObject<boolean>;
   onSync: (immediateEmployees?: Employee[], immediateAttendance?: AttendanceRecord[], immediatePayrollHistory?: PayrollHistoryRecord[], immediatePayrollDraft?: PayrollDraft | { id: string; delete: true }) => Promise<boolean>;
 }
 
-const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmployees, attendance, setAttendance, payrollHistory, setPayrollHistory, payrollDrafts, setPayrollDrafts, stores, setActiveTab, onSync }) => {
+const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmployees, attendance, setAttendance, payrollHistory, setPayrollHistory, payrollDrafts, setPayrollDrafts, stores, setActiveTab, payrollStart, setPayrollStart, payrollEnd, setPayrollEnd, payrollManualAdjustments, setPayrollManualAdjustments, skipDraftLoadRef, onSync }) => {
   const view = activeTab.split('-')[1] || 'personnel';
   const isAdmin = user.role === UserRole.ADMIN;
 
@@ -72,32 +79,6 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
   });
   const [auditEnd, setAuditEnd] = useState(getPHDateISO());
 
-  const getWeekBounds = () => {
-    const now = new Date();
-    const phDateStr = getPHDateISO(now);
-    const [y, m, d] = phDateStr.split('-').map(Number);
-    const phDate = new Date(Date.UTC(y, m - 1, d));
-    const dayOfWeek = phDate.getUTCDay(); // 0 (Sun) - 6 (Sat)
-    
-    const start = new Date(phDate);
-    start.setUTCDate(phDate.getUTCDate() - dayOfWeek);
-    
-    const end = new Date(start);
-    end.setUTCDate(start.getUTCDate() + 6);
-    
-    return { start: getPHDateISO(start), end: getPHDateISO(end) };
-  };
-
-  const [payrollStart, setPayrollStart] = useState(() => getWeekBounds().start);
-  const [payrollEnd, setPayrollEnd] = useState(() => getWeekBounds().end);
-  
-  const [payrollManualAdjustments, setPayrollManualAdjustments] = useState<Record<string, { 
-    loanPayment: string | null; 
-    sssPayment: string | null;
-    overtime: Record<string, string>; 
-    incentive: string;
-  }>>({});
-
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [printPayslipTarget, setPrintPayslipTarget] = useState<{ empId: string; data: any } | null>(null);
 
@@ -117,21 +98,6 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
     }
     return dates;
   }, [payrollStart, payrollEnd]);
-
-  useEffect(() => {
-    if (view === 'payroll') {
-      const draft = payrollDrafts.find(d => 
-        String(d.storeId) === String(user.selectedStoreId) && 
-        d.periodStart === payrollStart && 
-        d.periodEnd === payrollEnd
-      );
-      if (draft && draft.adjustments) {
-        setPayrollManualAdjustments(draft.adjustments);
-      } else {
-        setPayrollManualAdjustments({});
-      }
-    }
-  }, [payrollStart, payrollEnd, user.selectedStoreId, payrollDrafts, view]);
 
   // Auto-fill form when selecting employee or date to allow adding new entries or editing existing ones
   useEffect(() => {
@@ -1055,6 +1021,7 @@ const HRManagement: React.FC<HRProps> = ({ activeTab, user, employees, setEmploy
                     <button 
                       onClick={() => {
                         if (!confirm("Load this record into Payroll Processing for modification? You can then adjust attendance or OT and re-finalize.")) return;
+                        skipDraftLoadRef.current = true;
                         setPayrollStart(selectedHistory.periodStart);
                         setPayrollEnd(selectedHistory.periodEnd);
                         const nextAdjustments: Record<string, any> = {};

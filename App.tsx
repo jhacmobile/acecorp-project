@@ -78,6 +78,47 @@ const App = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [orderToModify, setOrderToModify] = useState<Order | null>(null);
   
+  const getPHDateISO = (date: Date = new Date()) => {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(date);
+  };
+
+  const getWeekBounds = () => {
+    const now = new Date();
+    const phDateStr = getPHDateISO(now);
+    const [y, m, d] = phDateStr.split('-').map(Number);
+    const phDate = new Date(Date.UTC(y, m - 1, d));
+    const dayOfWeek = phDate.getUTCDay(); 
+    const start = new Date(phDate);
+    start.setUTCDate(phDate.getUTCDate() - dayOfWeek);
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+    return { start: getPHDateISO(start), end: getPHDateISO(end) };
+  };
+
+  const [payrollStart, setPayrollStart] = useState(() => getWeekBounds().start);
+  const [payrollEnd, setPayrollEnd] = useState(() => getWeekBounds().end);
+  const [payrollManualAdjustments, setPayrollManualAdjustments] = useState<Record<string, any>>({});
+  const skipDraftLoadRef = useRef(false);
+
+  useEffect(() => {
+    if (activeTab === 'hr-payroll') {
+      if (skipDraftLoadRef.current) {
+        skipDraftLoadRef.current = false;
+        return;
+      }
+      const draft = payrollDrafts.find(d => 
+        String(d.storeId) === String(currentUser?.selectedStoreId) && 
+        d.periodStart === payrollStart && 
+        d.periodEnd === payrollEnd
+      );
+      if (draft && draft.adjustments) {
+        setPayrollManualAdjustments(draft.adjustments);
+      } else {
+        setPayrollManualAdjustments({});
+      }
+    }
+  }, [payrollStart, payrollEnd, currentUser?.selectedStoreId, payrollDrafts, activeTab]);
+
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [printCopyType, setPrintCopyType] = useState<'CUSTOMER' | 'GATE' | 'STORE' | 'ALL'>('ALL');
   const [isPrinting, setIsPrinting] = useState(false);
@@ -618,8 +659,60 @@ const App = () => {
       case 'hr-personnel':
       case 'hr-attendance':
       case 'hr-payroll':
-      case 'hr-history': return <HRManagement key={activeTab} activeTab={activeTab} user={currentUser} employees={employees} setEmployees={setEmployees} attendance={attendance} setAttendance={setAttendance} payrollHistory={payrollHistory} setPayrollHistory={setPayrollHistory} payrollDrafts={payrollDrafts} setPayrollDrafts={setPayrollDrafts} stores={stores} setActiveTab={setActiveTab} onSync={(immediateEmps, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft) => handleManualSync(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, immediateEmps, undefined, undefined, undefined, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft)} />;
-      case 'hr': return <HRManagement key="hr" activeTab="hr-personnel" user={currentUser} employees={employees} setEmployees={setEmployees} attendance={attendance} setAttendance={setAttendance} payrollHistory={payrollHistory} setPayrollHistory={setPayrollHistory} payrollDrafts={payrollDrafts} setPayrollDrafts={setPayrollDrafts} stores={stores} setActiveTab={setActiveTab} onSync={(immediateEmps, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft) => handleManualSync(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, immediateEmps, undefined, undefined, undefined, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft)} />;
+      case 'hr-history': return (
+        <HRManagement 
+          key={activeTab} 
+          activeTab={activeTab} 
+          user={currentUser} 
+          employees={employees} 
+          setEmployees={setEmployees} 
+          attendance={attendance} 
+          setAttendance={setAttendance} 
+          payrollHistory={payrollHistory} 
+          setPayrollHistory={setPayrollHistory} 
+          payrollDrafts={payrollDrafts} 
+          setPayrollDrafts={setPayrollDrafts} 
+          stores={stores} 
+          setActiveTab={setActiveTab}
+          payrollStart={payrollStart}
+          setPayrollStart={setPayrollStart}
+          payrollEnd={payrollEnd}
+          setPayrollEnd={setPayrollEnd}
+          payrollManualAdjustments={payrollManualAdjustments}
+          setPayrollManualAdjustments={setPayrollManualAdjustments}
+          skipDraftLoadRef={skipDraftLoadRef}
+          onSync={(immediateEmps, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft) => 
+            handleManualSync(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, immediateEmps, undefined, undefined, undefined, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft)
+          } 
+        />
+      );
+      case 'hr': return (
+        <HRManagement 
+          key="hr" 
+          activeTab="hr-personnel" 
+          user={currentUser} 
+          employees={employees} 
+          setEmployees={setEmployees} 
+          attendance={attendance} 
+          setAttendance={setAttendance} 
+          payrollHistory={payrollHistory} 
+          setPayrollHistory={setPayrollHistory} 
+          payrollDrafts={payrollDrafts} 
+          setPayrollDrafts={setPayrollDrafts} 
+          stores={stores} 
+          setActiveTab={setActiveTab}
+          payrollStart={payrollStart}
+          setPayrollStart={setPayrollStart}
+          payrollEnd={payrollEnd}
+          setPayrollEnd={setPayrollEnd}
+          payrollManualAdjustments={payrollManualAdjustments}
+          setPayrollManualAdjustments={setPayrollManualAdjustments}
+          skipDraftLoadRef={skipDraftLoadRef}
+          onSync={(immediateEmps, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft) => 
+            handleManualSync(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, immediateEmps, undefined, undefined, undefined, immediateAttendance, immediatePayrollHistory, immediatePayrollDraft)
+          } 
+        />
+      );
       case 'admin': return <Admin key="admin" users={users} setUsers={setUsers} stores={stores} setStores={setStores} settings={settings} setSettings={setSettings} onSync={(o, s, u, p, b, c, t, st, se) => handleManualSync(o, s, u, p, b, c, t, st, undefined, undefined, undefined, undefined, undefined, undefined, undefined, se)} products={products} stocks={stocks} />;
       case 'bandi': return <BandiPage user={currentUser} employees={employees} attendance={attendance} setAttendance={setAttendance} onSync={(at) => handleManualSync(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, at)} />;
       default: return null;
