@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { Product, Stock, User, Store, StockTransfer, TransferStatus, Brand, ProductCategory, TransferItem, UserRole } from '../types';
 import { supabase } from '../supabaseClient';
 import CustomDatePicker from './CustomDatePicker';
@@ -264,7 +265,7 @@ const Inventory: React.FC<InventoryProps> = ({ user, products, setProducts, stoc
             @page { size: 80mm auto; margin: 0mm; }
             body { background: white !important; margin: 0 !important; padding: 0 !important; }
             .no-print { display: none !important; }
-            #transfer-manifest-print-root, #inventory-snapshot-root { 
+            #transfer-manifest-print-root, #hub-inventory-snapshot-root { 
                display: block !important; 
                width: 80mm !important; 
                height: auto !important; 
@@ -275,65 +276,71 @@ const Inventory: React.FC<InventoryProps> = ({ user, products, setProducts, stoc
                color: black !important; 
                position: static !important; 
             }
-            #transfer-manifest-print-root *, #inventory-snapshot-root * { visibility: visible !important; }
+            #transfer-manifest-print-root *, #hub-inventory-snapshot-root * { visibility: visible !important; }
           }
         `}</style>
 
         {/* PRINT ROOT: HUB INVENTORY SNAPSHOT */}
-        <div id="inventory-snapshot-root" className="hidden">
-           <div className="receipt-container font-mono text-black text-center text-[8.5px] w-[68mm] mx-auto pt-2 pb-2">
-              <h2 className="text-lg font-black uppercase italic leading-none mb-1 text-black">{currentStore?.name || 'ACECORP'}</h2>
-              <p className="text-[10px] uppercase font-bold border-y border-black border-dashed py-2 my-4 text-black">HUB INVENTORY SNAPSHOT</p>
-              <div className="text-left font-bold space-y-1 uppercase text-[8.5px] text-black">
-                 <div className="flex justify-between"><span>Registry Date:</span> <span>{new Date().toLocaleDateString()}</span></div>
-                 <div className="flex justify-between"><span>Audit Op:</span> <span>{user.username}</span></div>
-              </div>
-              <div className="border-b border-black border-dashed my-4"></div>
-              <table className="w-full text-left">
-                 <thead className="border-b border-black"><tr className="font-black text-[9px]"><th className="py-1">Asset SKU</th><th className="py-1 text-right">Qty</th></tr></thead>
-                 <tbody className="text-[8.5px]">{storeStockGrid.map(s => (<tr key={s.id} className="border-b border-black border-dotted"><td className="py-2 font-bold text-black uppercase">{s.productName}</td><td className="py-2 text-right font-black text-black">{s.quantity}</td></tr>))}</tbody>
-              </table>
-              <div className="mt-8 pt-4 border-t border-black border-dashed text-center text-black">
-                  <p className="font-bold uppercase text-[8.5px]">OFFICIAL REGISTRY COPY</p>
-                  <p className="font-bold uppercase text-[7.5px] mt-1">System Timestamp: {new Date().toLocaleTimeString()}</p>
-              </div>
-           </div>
-        </div>
-
-        <div id="transfer-manifest-print-root" className="hidden">
-          {manifestToView && (
+        {ReactDOM.createPortal(
+          <div id="hub-inventory-snapshot-root" className="hidden">
              <div className="receipt-container font-mono text-black text-center text-[8.5px] w-[68mm] mx-auto pt-2 pb-2">
-                <h2 className="text-lg font-black uppercase italic leading-none mb-1 text-black">{stores.find(s=>s.id===manifestToView.fromStoreId)?.name || 'ACECORP'}</h2>
-                <p className="text-[10px] uppercase font-bold border-y border-black border-dashed py-2 my-4 text-black">STOCK TRANSFER MANIFEST</p>
+                <h2 className="text-lg font-black uppercase italic leading-none mb-1 text-black">{currentStore?.name || 'ACECORP'}</h2>
+                <p className="text-[10px] uppercase font-bold border-y border-black border-dashed py-2 my-4 text-black">HUB INVENTORY SNAPSHOT</p>
                 <div className="text-left font-bold space-y-1 uppercase text-[8.5px] text-black">
-                   <div className="flex justify-between"><span>Registry ID:</span> <span>{manifestToView.id.slice(-8)}</span></div>
-                   <div className="flex justify-between"><span>To Node:</span> <span>{stores.find(s=>s.id===manifestToView.toStoreId)?.name}</span></div>
-                   <div className="flex justify-between"><span>Auth Op:</span> <span>{manifestToView.initiatedBy}</span></div>
+                   <div className="flex justify-between"><span>Registry Date:</span> <span>{new Date().toLocaleDateString()}</span></div>
+                   <div className="flex justify-between"><span>Audit Op:</span> <span>{user.username}</span></div>
                 </div>
                 <div className="border-b border-black border-dashed my-4"></div>
-                {manifestToView.items.length > 0 && (
-                  <div className="mb-4">
-                     <p className="font-black text-left border-b border-black mb-1 pb-1 text-black text-[9px]">OUTBOUND ASSETS</p>
-                     <table className="w-full text-left text-[8.5px]">
-                        <tbody>{manifestToView.items.map((item, i) => (<tr key={i} className="border-b border-dashed border-slate-200"><td className="py-2 font-bold text-black uppercase">{products.find(p=>p.id===item.productId)?.name || item.productId}</td><td className="py-2 text-right font-black text-black">x{item.qty}</td></tr>))}</tbody>
-                     </table>
-                  </div>
-                )}
-                {manifestToView.returnedItems && manifestToView.returnedItems.length > 0 && (
-                  <div className="mt-4">
-                     <p className="font-black text-left border-b border-black mb-1 pb-1 text-black text-[9px]">RETURNED EMPTIES</p>
-                     <table className="w-full text-left text-[8.5px]">
-                        <tbody>{manifestToView.returnedItems.map((item, i) => (<tr key={i} className="border-b border-dashed border-slate-200"><td className="py-2 font-bold text-black uppercase">{products.find(p=>p.id===item.productId)?.name || item.productId}</td><td className="py-2 text-right font-black text-black">x{item.qty}</td></tr>))}</tbody>
-                     </table>
-                  </div>
-                )}
+                <table className="w-full text-left">
+                   <thead className="border-b border-black"><tr className="font-black text-[9px]"><th className="py-1">Asset SKU</th><th className="py-1 text-right">Qty</th></tr></thead>
+                   <tbody className="text-[8.5px]">{storeStockGrid.map(s => (<tr key={s.id} className="border-b border-black border-dotted"><td className="py-2 font-bold text-black uppercase">{s.productName}</td><td className="py-2 text-right font-black text-black">{s.quantity}</td></tr>))}</tbody>
+                </table>
                 <div className="mt-8 pt-4 border-t border-black border-dashed text-center text-black">
                     <p className="font-bold uppercase text-[8.5px]">OFFICIAL REGISTRY COPY</p>
                     <p className="font-bold uppercase text-[7.5px] mt-1">System Timestamp: {new Date().toLocaleTimeString()}</p>
                 </div>
              </div>
-          )}
-        </div>
+          </div>,
+          document.body
+        )}
+
+        {ReactDOM.createPortal(
+          <div id="transfer-manifest-print-root" className="hidden">
+            {manifestToView && (
+               <div className="receipt-container font-mono text-black text-center text-[8.5px] w-[68mm] mx-auto pt-2 pb-2">
+                  <h2 className="text-lg font-black uppercase italic leading-none mb-1 text-black">{stores.find(s=>s.id===manifestToView.fromStoreId)?.name || 'ACECORP'}</h2>
+                  <p className="text-[10px] uppercase font-bold border-y border-black border-dashed py-2 my-4 text-black">STOCK TRANSFER MANIFEST</p>
+                  <div className="text-left font-bold space-y-1 uppercase text-[8.5px] text-black">
+                     <div className="flex justify-between"><span>Registry ID:</span> <span>{manifestToView.id.slice(-8)}</span></div>
+                     <div className="flex justify-between"><span>To Node:</span> <span>{stores.find(s=>s.id===manifestToView.toStoreId)?.name}</span></div>
+                     <div className="flex justify-between"><span>Auth Op:</span> <span>{manifestToView.initiatedBy}</span></div>
+                  </div>
+                  <div className="border-b border-black border-dashed my-4"></div>
+                  {manifestToView.items.length > 0 && (
+                    <div className="mb-4">
+                       <p className="font-black text-left border-b border-black mb-1 pb-1 text-black text-[9px]">OUTBOUND ASSETS</p>
+                       <table className="w-full text-left text-[8.5px]">
+                          <tbody>{manifestToView.items.map((item, i) => (<tr key={i} className="border-b border-dashed border-slate-200"><td className="py-2 font-bold text-black uppercase">{products.find(p=>p.id===item.productId)?.name || item.productId}</td><td className="py-2 text-right font-black text-black">x{item.qty}</td></tr>))}</tbody>
+                       </table>
+                    </div>
+                  )}
+                  {manifestToView.returnedItems && manifestToView.returnedItems.length > 0 && (
+                    <div className="mt-4">
+                       <p className="font-black text-left border-b border-black mb-1 pb-1 text-black text-[9px]">RETURNED EMPTIES</p>
+                       <table className="w-full text-left text-[8.5px]">
+                          <tbody>{manifestToView.returnedItems.map((item, i) => (<tr key={i} className="border-b border-dashed border-slate-200"><td className="py-2 font-bold text-black uppercase">{products.find(p=>p.id===item.productId)?.name || item.productId}</td><td className="py-2 text-right font-black text-black">x{item.qty}</td></tr>))}</tbody>
+                       </table>
+                    </div>
+                  )}
+                  <div className="mt-8 pt-4 border-t border-black border-dashed text-center text-black">
+                      <p className="font-bold uppercase text-[8.5px]">OFFICIAL REGISTRY COPY</p>
+                      <p className="font-bold uppercase text-[7.5px] mt-1">System Timestamp: {new Date().toLocaleTimeString()}</p>
+                  </div>
+               </div>
+            )}
+          </div>,
+          document.body
+        )}
         <div className="flex justify-between items-center mb-8 px-2">
           <h1 className="text-[28px] font-black italic uppercase tracking-tighter text-slate-900 leading-none">Stock Transfer Hub</h1>
           <div className="flex items-center gap-4">
@@ -582,8 +589,8 @@ const Inventory: React.FC<InventoryProps> = ({ user, products, setProducts, stoc
         @media print {
           @page { size: 80mm auto; margin: 0mm; }
           body * { visibility: hidden !important; }
-          #inventory-snapshot-root, #inventory-snapshot-root * { visibility: visible !important; display: block !important; }
-          #inventory-snapshot-root { 
+          #stock-registry-snapshot-root, #stock-registry-snapshot-root * { visibility: visible !important; display: block !important; }
+          #stock-registry-snapshot-root { 
              position: absolute !important; 
              left: 0; top: 0; 
              width: 80mm !important; 
@@ -598,24 +605,27 @@ const Inventory: React.FC<InventoryProps> = ({ user, products, setProducts, stoc
       `}</style>
       
       {/* PRINT ROOT: STOCK REGISTRY (80MM OPTIMIZED) */}
-      <div id="inventory-snapshot-root" className="hidden">
-        <div className="receipt-container font-mono text-black text-center text-[8.5px] w-[68mm] mx-auto pt-2 pb-12">
-           <h2 className="text-lg font-black uppercase italic leading-none mb-1 text-black">{currentStore?.name || 'ACECORP'}</h2>
-           <p className="text-[10px] uppercase font-bold border-y border-black border-dashed py-2 my-4 text-black">STOCK REGISTRY SNAPSHOT</p>
-           <div className="text-left space-y-1 mb-3 font-bold uppercase text-[8.5px] text-black">
-              <div className="flex justify-between"><span>Registry Date:</span> <span>{new Date().toLocaleDateString()}</span></div>
-              <div className="flex justify-between"><span>Audit Operator:</span> <span>{user.username}</span></div>
-           </div>
-           <table className="w-full text-left">
-              <thead className="border-b border-black"><tr className="font-black text-[9px]"><th className="py-1">Asset SKU</th><th className="py-1 text-right">Qty</th></tr></thead>
-              <tbody className="text-[8.5px]">{storeStockGrid.map(s => (<tr key={s.id} className="border-b border-black border-dotted"><td className="py-2 font-bold text-black uppercase">{s.productName}</td><td className="py-2 text-right font-black text-black">{s.quantity}</td></tr>))}</tbody>
-           </table>
-           <div className="mt-8 pt-4 border-t border-black border-dashed text-center text-black">
-               <p className="font-bold uppercase text-[8.5px]">OFFICIAL REGISTRY COPY</p>
-               <p className="font-bold uppercase text-[7.5px] mt-1">System Timestamp: {new Date().toLocaleTimeString()}</p>
-           </div>
-        </div>
-      </div>
+      {ReactDOM.createPortal(
+        <div id="stock-registry-snapshot-root" className="hidden">
+          <div className="receipt-container font-mono text-black text-center text-[8.5px] w-[68mm] mx-auto pt-2 pb-12">
+             <h2 className="text-lg font-black uppercase italic leading-none mb-1 text-black">{currentStore?.name || 'ACECORP'}</h2>
+             <p className="text-[10px] uppercase font-bold border-y border-black border-dashed py-2 my-4 text-black">STOCK REGISTRY SNAPSHOT</p>
+             <div className="text-left space-y-1 mb-3 font-bold uppercase text-[8.5px] text-black">
+                <div className="flex justify-between"><span>Registry Date:</span> <span>{new Date().toLocaleDateString()}</span></div>
+                <div className="flex justify-between"><span>Audit Operator:</span> <span>{user.username}</span></div>
+             </div>
+             <table className="w-full text-left">
+                <thead className="border-b border-black"><tr className="font-black text-[9px]"><th className="py-1">Asset SKU</th><th className="py-1 text-right">Qty</th></tr></thead>
+                <tbody className="text-[8.5px]">{storeStockGrid.map(s => (<tr key={s.id} className="border-b border-black border-dotted"><td className="py-2 font-bold text-black uppercase">{s.productName}</td><td className="py-2 text-right font-black text-black">{s.quantity}</td></tr>))}</tbody>
+             </table>
+             <div className="mt-8 pt-4 border-t border-black border-dashed text-center text-black">
+                 <p className="font-bold uppercase text-[8.5px]">OFFICIAL REGISTRY COPY</p>
+                 <p className="font-bold uppercase text-[7.5px] mt-1">System Timestamp: {new Date().toLocaleTimeString()}</p>
+             </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       <div className="flex flex-col gap-6 mb-8 px-1 no-print">
         <div className="flex justify-between items-center">
